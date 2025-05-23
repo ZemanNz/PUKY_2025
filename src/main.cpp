@@ -1,88 +1,82 @@
 #include <Arduino.h>
+#include <stdint.h>
 #include "robotka.h"
 #include "smart_servo_command.h"
-#include <Wire.h>
-#include <Adafruit_TCS34725.h>
 #include "motor_commands.h"
 
-using namespace lx16a;
-Adafruit_TCS34725 tcs = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_50MS, TCS34725_GAIN_4X);
-float r, g, b;
-void scan_i2c()
-{
-  Serial.println("Scanning I2C bus...");
-  for (byte addr = 1; addr < 127; addr++) {
-    Wire.beginTransmission(addr);
-    if (Wire.endTransmission() == 0) {
-      Serial.print("Device found at address: 0x");
-      Serial.println(addr, HEX);
+#define RX1_PIN   16
+#define TX1_PIN   17  // mimochodem nepotřebujeme, ale Arduino vyžaduje parametry
+
+// Stejná struktura (packed implicitně)
+typedef struct __attribute__((packed)) {
+    uint8_t  id;
+    int16_t  value;
+} ServoMsg;
+
+
+const uint8_t SYNC0 = 0xAA;
+const uint8_t SYNC1 = 0x55;
+
+enum RxState { WAIT_SYNC0, WAIT_SYNC1, READ_PAYLOAD };
+RxState state = WAIT_SYNC0;
+
+static const size_t PAYLOAD_SIZE = sizeof(ServoMsg);
+uint8_t buf[PAYLOAD_SIZE];
+size_t idx = 0;
+
+void setup() {
+  rkConfig cfg;
+  rkSetup(cfg);
+  
+  rkLedRed(true); // Turn on red LED
+  rkLedBlue(true); // Turn on blue LED
+  printf("Robotka started!\n");
+  delay(5000); // Wait for 1 second
+  forward(2000, 70); // Call a motor function
+  delay(500); // Wait for the motor function to execute
+  Serial1.begin(115200, SERIAL_8N1, RX1_PIN, TX1_PIN);
+  auto &bus = rkSmartServoBus(2);
+  s_s_init(bus, 1, 0, 239);
+  s_s_init(bus, 0, 70, 220);
+  printf("Servo 0 je na pozici %f stupnu\n", bus.pos(0).deg());
+  printf("Servo 1 je na pozici %f stupnu\n", bus.pos(1).deg());
+  printf("done\n");
+  while (true) {
+    while (Serial1.available()) {
+    uint8_t c = Serial1.read();
+    printf("c: %02X\n", c);
+    switch (state) {
+      case WAIT_SYNC0:
+        if (c == SYNC0) state = WAIT_SYNC1;
+        break;
+      case WAIT_SYNC1:
+        if (c == SYNC1) {
+          state = READ_PAYLOAD;
+          idx = 0;
+        } else {
+          // možná c je už SYNC0, zkusit znovu
+          state = (c == SYNC0) ? WAIT_SYNC1 : WAIT_SYNC0;
+        }
+        break;
+      case READ_PAYLOAD:
+        buf[idx++] = c;
+        if (idx >= PAYLOAD_SIZE) {
+          // máme celý payload
+          ServoMsg m;
+          memcpy(&m, buf, PAYLOAD_SIZE);
+          printf("Received: ");
+          printf("ID: %d, Value: %d\n", m.id, m.value);
+          // zpracování zprávy
+          s_s_move(bus, m.id, m.value, 50.0);
+          // zpracování zprávy
+          state = WAIT_SYNC0;
+        }
+        break;
     }
   }
+  }
 }
-void setup() {
-    Serial.begin(115200);
-    rkConfig cfg;
-    rkSetup(cfg);
-    printf("Robotka started!\n");
-    pinMode(14, PULLUP);
-    pinMode(26, PULLUP);
-    delay(50);
-    Wire.begin(14, 26, 400000);
-    Wire.setTimeOut(1);
-    scan_i2c();
-    printf("Sensor not found.");
-    rkColorSensorInit("front", Wire, tcs);
-    pinMode(Bbutton1, INPUT_PULLUP);
-    pinMode(Bbutton2, INPUT_PULLUP);
-    rkLedRed(true); // Turn on red LED
-    rkLedBlue(true); // Turn on blue LED
-    auto &bus = rkSmartServoBus(2);
-    s_s_init(bus, 1, 0, 210);
-    s_s_init(bus, 0, 30, 180);
-    printf("Servo 0 je na pozici %f stupnu\n", bus.pos(0).deg());
-    printf("Servo 1 je na pozici %f stupnu\n", bus.pos(1).deg());
 
-    s_s_move(bus, 1, 0, 50.0);
-    delay(5000);
-    s_s_move(bus, 1, 210, 50.0);
-    delay(5000);
-    s_s_move(bus, 0, 180, 50.0);
-    delay(5000);
-    s_s_soft_move(bus, 0, 30, 40.0);
-    delay(5000);
-    s_s_move(bus, 1, 0, 50.0);
-    delay(10000);
-    scan_i2c();
-    if (rkColorSensorGetRGB("front", &r, &g, &b)) {
-        printf("R: %.3f", r);
-        printf(" G: %.3f", g);
-        printf(" B: %.3f\n", b);
-    } else {
-        printf("Sensor 'front' not found.");
-    }
-
-    delay(5000); // Wait for a second before the next reading
-    forward(2000, 70); // Call a motor function
-    delay(5000); // Wait for the motor function to execute
-    back_buttons(20);
-    delay(5000); // Wait for the motor function to execute
-    forward(700, 70); // Call a motor function
-    delay(5000); // Wait for the motor function to execute
-    while (true) {
-        if ((digitalRead(Bbutton1) == LOW)){
-            rkLedYellow(true); // Turn on red LED
-            rkLedGreen(false); // Turn on red LED
-        }
-        else if ((digitalRead(Bbutton2) == LOW)){
-            rkLedGreen(true); // Turn on red LED
-            rkLedYellow(false); // Turn on red LED
-        }
-        else{
-            rkLedYellow(false); // Turn on red LED
-            rkLedGreen(false); // Turn on red LED
-        }
-        delay(100);
-    }   
-}
 void loop() {
+  
 }
