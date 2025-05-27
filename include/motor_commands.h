@@ -25,7 +25,7 @@ void forward(float mm, float speed) {
     int M1_pos = 0, M4_pos = 0, odhylaka = 0, integral = 0, last_odchylka = 0;
     int M1_pos_up = 0, M4_pos_up = 0, M1_pos_start = 0, M4_pos_start = 0;
     int target = (32000 * speed/100);
-    std::cout << "target: " << target << std::endl;
+    // std::cout << "target: " << target << std::endl;
 
     auto& man = rb::Manager::get(); // vytvoří referenci na man class
     man.motor(rb::MotorId::M1).setCurrentPosition(0);
@@ -39,11 +39,11 @@ void forward(float mm, float speed) {
     });
     delay(50); // pro jistotu, aby se stihly načíst pozice
 
-    Serial.printf("[FORWARD] Start M1_pos_start: %d, M4_pos_start: %d\n", M1_pos_start, M4_pos_start);
+    // Serial.printf("[FORWARD] Start M1_pos_start: %d, M4_pos_start: %d\n", M1_pos_start, M4_pos_start);
 
     int M1_must_go = ((mm / (127.5 * 3.141592)) * 40.4124852f * 48.f) + M1_pos_start; // přepočet mm na encodery
     int M4_must_go = ((mm / (127.5 * 3.141592)) * 40.4124852f * 48.f) + M4_pos_start;
-    Serial.printf("[FORWARD] M1_must_go: %d, M4_must_go: %d\n", M1_must_go, M4_must_go);
+    // Serial.printf("[FORWARD] M1_must_go: %d, M4_must_go: %d\n", M1_must_go, M4_must_go);
 
     // Zrychlování
     for(int i = 0; i < target-1; i += a) {
@@ -57,7 +57,7 @@ void forward(float mm, float speed) {
         });
         man.motor(rb::MotorId::M1).power(-i * 0.9);
         man.motor(rb::MotorId::M4).power(i + odhylaka * Kp + integral * Ki + (odhylaka - last_odchylka) * Kd);
-        Serial.printf("[ACCEL] i: %d | M1_pos: %d | M4_pos: %d | odchylka: %d | integral: %d\n", i, M1_pos, M4_pos, odhylaka, integral);
+        // Serial.printf("[ACCEL] i: %d | M1_pos: %d | M4_pos: %d | odchylka: %d | integral: %d\n", i, M1_pos, M4_pos, odhylaka, integral);
         delay(10);
     }
 
@@ -72,7 +72,7 @@ void forward(float mm, float speed) {
 
     int M1_pos_diff = M1_pos_up - M1_pos_start;
     int M4_pos_diff = M4_pos_up - M4_pos_start;
-    Serial.printf("[AFTER ACCEL] M1_pos_up: %d, M4_pos_up: %d, M1_pos_diff: %d, M4_pos_diff: %d\n", M1_pos_up, M4_pos_up, M1_pos_diff, M4_pos_diff);
+    // Serial.printf("[AFTER ACCEL] M1_pos_up: %d, M4_pos_up: %d, M1_pos_diff: %d, M4_pos_diff: %d\n", M1_pos_up, M4_pos_up, M1_pos_diff, M4_pos_diff);
 
     integral = 0; // reset integrálu
 
@@ -101,7 +101,7 @@ void forward(float mm, float speed) {
             M4_pos = info.position();
         });
 
-        Serial.printf("[CONST] M1_pos: %d | M4_pos: %d | odchylka: %d | integral: %d | powerM4: %d\n", M1_pos, M4_pos, odhylaka, integral, rawPower);
+        // Serial.printf("[CONST] M1_pos: %d | M4_pos: %d | odchylka: %d | integral: %d | powerM4: %d\n", M1_pos, M4_pos, odhylaka, integral, rawPower);
 
         delay(50);
         last_odchylka = odhylaka;
@@ -128,20 +128,22 @@ void forward(float mm, float speed) {
             man.motor(rb::MotorId::M4).requestInfo([&](rb::Motor& info) {
               M4_pos = info.position();
             });
-            Serial.printf("[finishing] M1_pos: %d | M4_pos: %d | odchylka: %d | integral: %d\n", M1_pos, M4_pos, odhylaka, integral);
+            // Serial.printf("[finishing] M1_pos: %d | M4_pos: %d | odchylka: %d | integral: %d\n", M1_pos, M4_pos, odhylaka, integral);
           }
         }
         man.motor(rb::MotorId::M1).power(-i);
         man.motor(rb::MotorId::M4).power(i );
 
-        Serial.printf("[DECEL] i: %d | M1_pos: %d | M4_pos: %d | odchylka: %d | integral: %d\n", i, M1_pos, M4_pos, odhylaka, integral);
+        // Serial.printf("[DECEL] i: %d | M1_pos: %d | M4_pos: %d | odchylka: %d | integral: %d\n", i, M1_pos, M4_pos, odhylaka, integral);
 
         delay(10);
     }
     int diff = abs(M1_pos - M4_pos);
-    if (M1_pos < M4_pos) {
-        Serial.printf("[DOROVNÁNÍ] M1 dojíždí: %d ticků\n", diff);
-        while (M1_pos < (M4_pos-5)) {
+    int time=0;
+    int stop_time = 700; // časový limit pro dorovnání
+    if ((M1_pos < M4_pos)) {
+        // Serial.printf("[DOROVNÁNÍ] M1 dojíždí: %d ticků\n", diff);
+        while ((M1_pos < (M4_pos-7)) && (time < stop_time)) {
             man.motor(rb::MotorId::M1).power(-3900);
             man.motor(rb::MotorId::M4).power(2500);
             man.motor(rb::MotorId::M1).requestInfo([&](rb::Motor& info) {
@@ -151,10 +153,12 @@ void forward(float mm, float speed) {
                 M4_pos = info.position();
             });
             delay(5);
+            time+=5;
+            // Serial.printf("[time] %d\n", time);
         }
     } else if (M4_pos < M1_pos) {
-        Serial.printf("[DOROVNÁNÍ] M4 dojíždí: %d ticků\n", diff);
-        while (M4_pos < (M1_pos - 5)) {
+        // Serial.printf("[DOROVNÁNÍ] M4 dojíždí: %d ticků\n", diff);
+        while ((M4_pos < (M1_pos - 7)) && (time < stop_time)) {
             man.motor(rb::MotorId::M1).power(-2500);
             man.motor(rb::MotorId::M4).power(3900);
             man.motor(rb::MotorId::M4).requestInfo([&](rb::Motor& info) {
@@ -163,19 +167,21 @@ void forward(float mm, float speed) {
             man.motor(rb::MotorId::M1).requestInfo([&](rb::Motor& info) {
                 M1_pos = -info.position();
             });
-            Serial.printf("[DOROVNÁNÍ] M1_pos: %d | M4_pos: %d | odchylka: %d\n", M1_pos, M4_pos, M1_pos - M4_pos);
+            // Serial.printf("[DOROVNÁNÍ] M1_pos: %d | M4_pos: %d | odchylka: %d\n", M1_pos, M4_pos, M1_pos - M4_pos);
             delay(5);
+            time+=5;
+            // Serial.printf("[time] %d\n", time);
         }
     }
     // Zastavit oba motory na konci
     man.motor(rb::MotorId::M1).power(0);
     man.motor(rb::MotorId::M4).power(0);
-    Serial.println("[FORWARD] Dorovnání hotovo!");
+    // Serial.println("[FORWARD] Dorovnání hotovo!");
 
-    Serial.println("[FORWARD] Hotovo!");
+    // Serial.println("[FORWARD] Hotovo!");
 }
 void encodery() {
-  Serial.printf("L: %f, R: %f\n", rkMotorsGetPositionLeft(), rkMotorsGetPositionRight());
+  // Serial.printf("L: %f, R: %f\n", rkMotorsGetPositionLeft(), rkMotorsGetPositionRight());
 }
 
 void radius_r(int degrees, int polomer, int speed)
@@ -235,6 +241,8 @@ void radius_l(int degrees, int polomer, int speed){
 }
 void turn_on_spot(int degrees){
   rkMotorsDrive(((degrees/360.0) * PI * roztec) * koeficient_turn , ((degrees/360.0) * -PI * roztec)* koeficient_turn, 30 , 30 );
+    // Serial.printf("Otáčení na místě o %d stupňů\n", degrees);
+    delay(500);
 }
 void back_buttons(int speed)
 {
@@ -242,9 +250,25 @@ void back_buttons(int speed)
     const float Kp = 55.0f;
     const float Ki = 0.01f;
     const float Kd = 0.1f;
-
+    int target = (32000 * speed/100);
     auto& man = rb::Manager::get();
-
+    man.motor(rb::MotorId::M1).setCurrentPosition(0);
+    man.motor(rb::MotorId::M4).setCurrentPosition(0);
+    // Zrychlování
+    for(int i = 0; i < target-1; i += a) {
+        odchylka = M1_pos - M4_pos;
+        integral += odchylka;
+        man.motor(rb::MotorId::M1).requestInfo([&](rb::Motor& info) {
+            M1_pos = -info.position();
+        });
+        man.motor(rb::MotorId::M4).requestInfo([&](rb::Motor& info) {
+            M4_pos = info.position();
+        });
+        man.motor(rb::MotorId::M1).power(i * 0.94);
+        man.motor(rb::MotorId::M4).power(-i + odchylka * Kp + integral * Ki + (odchylka - last_odchylka) * Kd);
+        // Serial.printf("[ACCEL] i: %d | M1_pos: %d | M4_pos: %d | odchylka: %d | integral: %d\n", i, M1_pos, M4_pos, odchylka, integral);
+        delay(8);
+    }
     while (true)
     {
         // Získání aktuálních pozic
@@ -261,7 +285,7 @@ void back_buttons(int speed)
         man.motor(rb::MotorId::M1).power(speed * 320);
         man.motor(rb::MotorId::M4).power(-speed * 320 + odchylka * Kp + integral * Ki + (odchylka - last_odchylka) * Kd);
 
-        Serial.printf("[BACK] M1_pos: %d | M4_pos: %d | odchylka: %d | integral: %d\n", M1_pos, M4_pos, odchylka, integral);
+        // Serial.printf("[BACK] M1_pos: %d | M4_pos: %d | odchylka: %d | integral: %d\n", M1_pos, M4_pos, odchylka, integral);
 
         last_odchylka = odchylka;
 
@@ -271,7 +295,7 @@ void back_buttons(int speed)
         delay(50);
     }
     delay(150);
-    Serial.println("Obě Tlačítka STISKNUTY!");
+    // Serial.println("Obě Tlačítka STISKNUTY!");
     rkMotorsSetPower(0, 0);
 }
 //timeout
