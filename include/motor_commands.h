@@ -229,6 +229,9 @@ void radius_l(int degrees, int polomer, int speed){
             right_done = true;
         });
     }
+    while(!left_done || !right_done) {
+        delay(10); // čekáme na dokončení obou motorů
+    }
 }
 void turn_on_spot(int degrees){
   rkMotorsDrive(((degrees/360.0) * PI * roztec) * koeficient_turn , ((degrees/360.0) * -PI * roztec)* koeficient_turn, 30 , 30 );
@@ -253,7 +256,7 @@ void back_buttons(int speed)
         });
 
         odchylka = M1_pos - M4_pos;
-        integral += odchylka; 
+        integral += odchylka;
 
         man.motor(rb::MotorId::M1).power(speed * 320);
         man.motor(rb::MotorId::M4).power(-speed * 320 + odchylka * Kp + integral * Ki + (odchylka - last_odchylka) * Kd);
