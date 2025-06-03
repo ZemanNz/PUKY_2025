@@ -180,8 +180,15 @@ void forward(float mm, float speed) {
 
     // Serial.println("[FORWARD] Hotovo!");
 }
-void encodery() {
-  // Serial.printf("L: %f, R: %f\n", rkMotorsGetPositionLeft(), rkMotorsGetPositionRight());
+
+int encodery() {
+    int M1_pos = 0, M4_pos = 0;
+    auto& man = rb::Manager::get(); // vytvoří referenci na man class
+    man.motor(rb::MotorId::M4).requestInfo([&](rb::Motor& info) {
+            M4_pos = info.position();
+        });
+        Serial.printf("[ENCODERY] M4_pos: %d\n", M4_pos);
+    return M4_pos;
 }
 
 void radius_r(int degrees, int polomer, int speed)
@@ -298,4 +305,11 @@ void back_buttons(int speed)
     // Serial.println("Obě Tlačítka STISKNUTY!");
     rkMotorsSetPower(0, 0);
 }
-//timeout
+// Přidej například na konec souboru:
+
+// Nastaví výkon obou motorů podle zadané hodnoty (-32000 až 32000)
+void setMotorsPower(int powerLeft, int powerRight) {
+    auto& man = rb::Manager::get();
+    man.motor(rb::MotorId::M1).power(-powerRight * 0.97);
+    man.motor(rb::MotorId::M4).power(powerLeft);
+}
