@@ -6,8 +6,8 @@
 /////////////////////////////////////
 static const uint8_t Bbutton1 = 34;
 static const uint8_t Bbutton2 = 35;
-const float roztec = 200.0; // roztec kol v mm
-float  koeficient_turn = 1.030; // koeficient pro otáčení na místě
+const float roztec = 267.0; // roztec kol v mm
+float  koeficient_turn = 1.069; // koeficient pro otáčení na místě
 
 float koeficient_r_f = 1.029;
 float koeficient_l_f = 1.018;
@@ -180,6 +180,11 @@ void forward(float mm, float speed) {
 
     // Serial.println("[FORWARD] Hotovo!");
 }
+void reser_encoders() {
+    auto& man = rb::Manager::get(); // vytvoří referenci na man class
+    man.motor(rb::MotorId::M1).setCurrentPosition(0);
+    man.motor(rb::MotorId::M4).setCurrentPosition(0);
+}
 
 int encodery() {
     int M1_pos = 0, M4_pos = 0;
@@ -246,8 +251,8 @@ void radius_l(int degrees, int polomer, int speed){
         delay(10); // čekáme na dokončení obou motorů
     }
 }
-void turn_on_spot(int degrees){
-  rkMotorsDrive(((degrees/360.0) * PI * roztec) * koeficient_turn , ((degrees/360.0) * -PI * roztec)* koeficient_turn, 30 , 30 );
+void turn_on_spot(float degrees){
+  rkMotorsDrive(((degrees/360.0) * PI * roztec/2) * koeficient_turn , ((degrees/360.0) * -PI * roztec/2)* koeficient_turn, 30 , 30 );
     // Serial.printf("Otáčení na místě o %d stupňů\n", degrees);
     delay(500);
 }
@@ -310,6 +315,6 @@ void back_buttons(int speed)
 // Nastaví výkon obou motorů podle zadané hodnoty (-32000 až 32000)
 void setMotorsPower(int powerLeft, int powerRight) {
     auto& man = rb::Manager::get();
-    man.motor(rb::MotorId::M1).power(-powerRight * 0.97);
+    man.motor(rb::MotorId::M1).power((-powerRight)* 0.95f);
     man.motor(rb::MotorId::M4).power(powerLeft);
 }

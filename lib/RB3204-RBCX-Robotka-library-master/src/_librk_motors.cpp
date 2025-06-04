@@ -261,11 +261,11 @@ int16_t Motors::pctToSpeed(float pct) const {
 }
 
 int32_t Motors::mmToTicks(float mm) const {
-    return (mm / m_wheel_circumference) * 41.62486f * 48.f;
+    return (mm / m_wheel_circumference) * 40.4124852f * 48.f;
 }
 
 float Motors::ticksToMm(int32_t ticks) const {
-    return float(ticks) / 41.62486f / 48.f * m_wheel_circumference;
+    return float(ticks) / 40.4124852f / 48.f * m_wheel_circumference;
 }
 
 }; // namespacer rk
