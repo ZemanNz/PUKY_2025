@@ -45,6 +45,73 @@ void close_r_box(){
   rkServosSetPosition(2, 70); // Servo 1 nastaví pnuti po 3minutach 90°
   delay(500);
 }
+int U1_distance = 10000;
+int U2_distance = 10000;
+int U3_distance = 10000;
+int U4_distance = 10000;
+bool je_neco_vepredu(int distance_mereni){
+    U1_distance = rkUltraMeasure(1);
+    U2_distance = rkUltraMeasure(2);
+    U4_distance = rkUltraMeasure(4);
+  if (U1_distance < 1){
+      U1_distance = 10000; // pokud je vzdálenost menší než 1, nastaví se na 10000
+  }
+  if (U2_distance < 1){
+      U2_distance = 10000; // pokud je vzdálenost menší než 1, nastaví se na 10000
+  }
+  if (U4_distance < 1){
+      U4_distance = 10000; // pokud je vzdálenost menší než 1, nastaví se na 10000
+  }
+    Serial.printf("U1: %d, U2: %d, U4: %d\n", U1_distance, U2_distance, U4_distance);
+    if (U1_distance < distance_mereni || U2_distance < distance_mereni || U4_distance < distance_mereni) {
+        Serial.printf("Přední senzory: U1: %d, U2: %d, U4: %d\n", U1_distance, U2_distance, U4_distance);
+        rkBuzzerSet(true);
+        delay(100);
+        rkBuzzerSet(false);
+        return true;
+    }
+    return false;
+}
+bool davam_prednost_z_prava = false;
+bool detekce_soupere(){
+  Serial.printf("U1: %d, U2: %d, U3: %d\n, U4: %d ", rkUltraMeasure(1), rkUltraMeasure(2), rkUltraMeasure(3), rkUltraMeasure(4));
+    if(je_neco_vepredu(200)) {
+        setMotorsPower(-7000, -7000); // Zastaví motory
+        rkBuzzerSet(true);
+        delay(300);
+        rkBuzzerSet(false);
+        delay(900);
+        setMotorsPower(0, 0); // Zastaví motory
+        return true; // Detekován soupeř
+    }
+    if((rkUltraMeasure(3) < 200) && (rkUltraMeasure(3) > 1)&& (!davam_prednost_z_prava)) { // U3 je senzor vzadu
+        davam_prednost_z_prava = true; // Dáváme přednost zprava
+        for(int i = 18000; i > 0; i=- 2000) {
+            setMotorsPower(i, i); // Zpomaluje motory
+            delay(10);
+        }
+        setMotorsPower(0,0);
+        int start_time = millis();
+        while (millis() - start_time < 5000) { // čeká 5 sekundy
+            if(je_neco_vepredu(200)){
+              setMotorsPower(-7000, -7000); // Zastaví motory
+              rkBuzzerSet(true);
+              delay(300);
+              rkBuzzerSet(false);
+              delay(900);
+              setMotorsPower(0, 0); // Zastaví motory
+              return true; // Detekován soupeř
+            }
+        }
+        Serial.println("Čekání na soupeře skončilo, ale nic se nenašlo.");
+        Serial.println("jedu dal.");
+        return false; // Čekání skončilo, ale soupeř nebyl detekován
+
+    }
+return false;
+}
+
+
 TaskHandle_t chytejPukyHandle = NULL; // Globální handle pro task
 
 enum Barva { RED, BLUE};
@@ -121,6 +188,14 @@ void zavreni_dvirek(){
   s_s_move(bus, 0, 125, 130.0); // nahoru
   delay(200);
 }
+void otevreni_prepazky(){
+  rkServosSetPosition(3, -90); // Servo 1 nastaví pnuti po 3minutach 90°
+  delay(200);
+}
+void zavreni_prepazky(){
+  rkServosSetPosition(3, 0); // Servo 1 nastaví pnuti po 3minutach 90°
+  delay(200);
+}
 void StopTask(void *pvParameters) {
     vTaskDelay(2.8 * 60 * 1000 / portTICK_PERIOD_MS); // 3 minuty
     Serial.println("Uplynuly 3 minuty, restartuji program...");
@@ -133,6 +208,7 @@ void ChytejPukyTask(void *pvParameters) {
     while (true) {
         auto now = Detekce_puku();
         if (now.je_tam) {
+          zavreni_prepazky();
             if (now.barva == RED) {
               if( puck_in_l_box < max_puck_per_box) {
                 Serial.println("Detekován červený puk!");
@@ -142,6 +218,7 @@ void ChytejPukyTask(void *pvParameters) {
                 rkMotorsDrive(60, 60, 100, 100);
                 zavreni_dvirek();
                 delay(200);
+                otevreni_prepazky();
                 setMotorsPower(20000, 20000); // zastaví motory
                 puck_in_l_box++;
                 Serial.printf("Puky v levém boxu: %d\n", puck_in_l_box);
@@ -155,6 +232,7 @@ void ChytejPukyTask(void *pvParameters) {
                   rkMotorsDrive(60, 60, 100, 100);
                   zavreni_dvirek();
                   delay(200);
+                  otevreni_prepazky();
                   setMotorsPower(20000, 20000); // zastaví motory
                   puck_in_r_box++;
                 }
@@ -194,146 +272,234 @@ void zkontroluj_pid(int power, int M1_pos, int M4_pos){
         man.motor(rb::MotorId::M4).power(rawPower);
         Last_odchylka = Odchylka;
 }
+///////////////////
+int M4_pos = 0;
+int M1_pos = 0;
 
-
-
-
-void modra(){
-  Serial.println("Modra barva");
+void jed_a_chytej_puky(int distance, bool x, bool kladna = true){
   auto& man = rb::Manager::get(); // vytvoří referenci na man class
   man.motor(rb::MotorId::M1).setCurrentPosition(0);
   man.motor(rb::MotorId::M4).setCurrentPosition(0);
-  int M4_pos = 0;
-  int M1_pos = 0;
+  otevreni_prepazky(); // Otevře prepážku
   man.motor(rb::MotorId::M4).requestInfo([&](rb::Motor& info) {
           M4_pos = info.position();
       });
   man.motor(rb::MotorId::M1).requestInfo([&](rb::Motor& info) {
          M1_pos = -info.position();
       });
+
   xTaskCreate(ChytejPukyTask, "ChytejPuky", 2048, NULL, 1, &chytejPukyHandle);
-  int distance1 = 1600;
-  Serial.printf("musi_jet::: M1_pos: %d, M4_pos: %d\n", MmToTicks(distance1), MmToTicks(distance1));
-  while(M4_pos < MmToTicks(distance1) && M1_pos < MmToTicks(distance1)) {
+
+  Serial.printf("musi_jet::: M1_pos: %d, M4_pos: %d\n", MmToTicks(distance), MmToTicks(distance));
+  setMotorsPower(20000, 20000); // Nastaví motory na 20000
+
+  while(M4_pos < MmToTicks(distance) && M1_pos < MmToTicks(distance)) {
           man.motor(rb::MotorId::M4).requestInfo([&](rb::Motor& info) {
               M4_pos = info.position();
           });
           man.motor(rb::MotorId::M1).requestInfo([&](rb::Motor& info) {
              M1_pos = -info.position();
           });
+
           Serial.printf("[ENCODERY] M4_pos: %d\n", M4_pos);
+
           if(M1_pos > 200 && M4_pos > 200) {
             zkontroluj_pid(20000, M1_pos, M4_pos);
           }
-          if((rkUltraMeasure(1) < 150 && (rkUltraMeasure(1) > 30)) || ((rkUltraMeasure(2) < 150) && (rkUltraMeasure(2) > 30))) {
-            Serial.println("Zastavuji, narazil na soupere!");
-            setMotorsPower(0, 0); // Zastaví motory
-            delay(1000);
-            if((rkUltraMeasure(1) < 150 && (rkUltraMeasure(1) < 30)) || ((rkUltraMeasure(2) < 150) && (rkUltraMeasure(2) < 30))){
-                
-                rkBuzzerSet(true);
-                delay(500);
-                rkBuzzerSet(false);
-                break;
-            }
+
+          if(detekce_soupere()) {
+           break;
           }
           delay(10);
     }
-      aktualni_pozice.y = TicksToMm(M1_pos); // Nastaví aktuální pozici na střed
+    man.motor(rb::MotorId::M4).requestInfo([&](rb::Motor& info) {
+              M4_pos = info.position();
+          });
+    man.motor(rb::MotorId::M1).requestInfo([&](rb::Motor& info) {
+             M1_pos = -info.position();
+          });
+    Serial.printf("[ENCODERY] M4_pos: %d, M1_pos: %d\n", M4_pos, M1_pos);
+    if(kladna){
+      if(x) {
+        aktualni_pozice.x = aktualni_pozice.x + TicksToMm(M1_pos); // Nastaví aktuální pozici na střed
+      }
+      else{
+        aktualni_pozice.y = aktualni_pozice.y + TicksToMm(M1_pos); // Nastaví aktuální pozici na střed
+      }
+    }
+    else{
+      if(x) {
+        aktualni_pozice.x = aktualni_pozice.x - TicksToMm(M1_pos); // Nastaví aktuální pozici na střed
+      }
+      else{
+        aktualni_pozice.y = aktualni_pozice.y - TicksToMm(M1_pos); // Nastaví aktuální pozici na střed
+      }
+    }
       vTaskDelete(chytejPukyHandle);
       chytejPukyHandle = NULL; // Uvolníme task, pokud běžel
       setMotorsPower(0, 0); // Zastaví motory
       delay(100);
-      turn_on_spot(90); // otočí se o 90 stupňů
       man.motor(rb::MotorId::M1).setCurrentPosition(0);
       man.motor(rb::MotorId::M4).setCurrentPosition(0);
       M1_pos = 0;
       M4_pos = 0;
-      int distance2 = 1000;
-      Serial.printf("musi_jet::: M1_pos: %d, M4_pos: %d\n", MmToTicks(distance2), MmToTicks(distance2));
-      xTaskCreate(ChytejPukyTask, "ChytejPuky", 2048, NULL, 1, &chytejPukyHandle);
-      setMotorsPower(20000, 20000); // Nastaví motory na 20000
-      while(M4_pos < MmToTicks(distance2) && M1_pos < MmToTicks(distance2)) {
-          man.motor(rb::MotorId::M4).requestInfo([&](rb::Motor& info) {
-              M4_pos = info.position();
-          });
-          man.motor(rb::MotorId::M1).requestInfo([&](rb::Motor& info) {
-             M1_pos = -info.position();
-          });
-          Serial.printf("[ENCODERY] M4_pos: %d\n", M4_pos);
-          if(M1_pos > 200 && M4_pos > 200) {
-            zkontroluj_pid(20000, M1_pos, M4_pos);
-          }
-          if((rkUltraMeasure(1) < 150 && (rkUltraMeasure(1) > 30)) || ((rkUltraMeasure(2) < 150) && (rkUltraMeasure(2) > 30))) {
-            Serial.println("Zastavuji, narazil na soupere!");
-            setMotorsPower(0, 0); // Zastaví motory
-            delay(1000);
-            if((rkUltraMeasure(1) < 150 && (rkUltraMeasure(1) < 30)) || ((rkUltraMeasure(2) < 150) && (rkUltraMeasure(2) < 30))){
-                rkBuzzerSet(true);
-                delay(500);
-                rkBuzzerSet(false);
-                break;
-            }
-          }
-          delay(10);
-      }
-      aktualni_pozice.x = (TicksToMm(M1_pos) + 350); // Nastaví aktuální pozici na střed
-      Serial.printf("Aktualni pozice: x: %d, y: %d\n", aktualni_pozice.x, aktualni_pozice.y);
-      vTaskDelete(chytejPukyHandle);
-      chytejPukyHandle = NULL; // Uvolníme task, pokud běžel
-      setMotorsPower(0, 0); // Zastaví motory
-      turn_on_spot(90); // otočí se
-      back_buttons(40); // otočí se o 180 stupňů
-      man.motor(rb::MotorId::M1).setCurrentPosition(0);
-      man.motor(rb::MotorId::M4).setCurrentPosition(0);
-      M1_pos = 0;
-      M4_pos = 0;
-      aktualni_pozice.y = 2500- stred_od_zadu; // Nastaví aktuální pozici na střed
-      Serial.printf("Aktualni pozice: x: %d, y: %d\n", aktualni_pozice.x, aktualni_pozice.y);
-      xTaskCreate(ChytejPukyTask, "ChytejPuky", 2048, NULL, 1, &chytejPukyHandle);
-      int distance3 = aktualni_pozice.y - stred_od_predu ; // Vzdálenost do levé krabice
-      setMotorsPower(20000, 20000); // Nastaví motory na 20000
-      Serial.printf("musi_jet::: M1_pos: %d, M4_pos: %d\n", MmToTicks(distance1), MmToTicks(distance1));
-      while(M4_pos < MmToTicks(distance1) && M1_pos < MmToTicks(distance1)) {
-              man.motor(rb::MotorId::M4).requestInfo([&](rb::Motor& info) {
-                  M4_pos = info.position();
-              });
-              man.motor(rb::MotorId::M1).requestInfo([&](rb::Motor& info) {
-                M1_pos = -info.position();
-              });
-              Serial.printf("[ENCODERY] M4_pos: %d\n", M4_pos);
-              if(M1_pos > 200 && M4_pos > 200) {
-                zkontroluj_pid(20000, M1_pos, M4_pos);
-              }
-              if((rkUltraMeasure(1) < 150 && (rkUltraMeasure(1) > 30)) || ((rkUltraMeasure(2) < 150) && (rkUltraMeasure(2) > 30))) {
-                Serial.println("Zastavuji, narazil na soupere!");
-                setMotorsPower(0, 0); // Zastaví motory
-                delay(1000);
-                if((rkUltraMeasure(1) < 150 && (rkUltraMeasure(1) < 30)) || ((rkUltraMeasure(2) < 150) && (rkUltraMeasure(2) < 30))){
-                    rkBuzzerSet(true);
-                    delay(500);
-                    rkBuzzerSet(false);
-                    break;
-                }
-              }
-              delay(10);
-          }
-      vTaskDelete(chytejPukyHandle);
-      chytejPukyHandle = NULL; // Uvolníme task, pokud běžel
-      setMotorsPower(0, 0); // Zastaví motory
-      M1_pos = 0;
-      M4_pos = 0;
-      aktualni_pozice.y = aktualni_pozice.y - TicksToMm(M1_pos);
-      Serial.printf("Aktualni pozice: x: %d, y: %d\n", aktualni_pozice.x, aktualni_pozice.y);
-      turn_on_spot(90); // otočí se o 90 stupňů
-      open_l_box(); // Otevře levý box --- cervene -- souperovi puky
-      forward(aktualni_pozice.x - 250, 70);
-      close_l_box(); // Zavře levý box
-      turn_on_spot(90); // otočí se o 90 stupňů
-      back_buttons(40); // otočí se o 180 stup
-      forward(60, 70); // Přejede do středu
-      open_r_box(); // Otevře pravý box --- modre -- svoje puky
-      forward(1000, 70); // Přejede do středu
+}
+
+
+
+void modra(){
+  Serial.println("Modra barva");
+  jed_a_chytej_puky(1800 - aktualni_pozice.y, false);
+  turn_on_spot(90); // otočí se o 90 stupňů
+  back_buttons(80); // otočí se o 180 stupňů
+  aktualni_pozice.x =stred_od_zadu; // Nastaví aktuální pozici na střed
+  delay(100);
+  jed_a_chytej_puky(1200 - aktualni_pozice.x, true);
+  turn_on_spot(90);
+  back_buttons(80);
+  aktualni_pozice.y = 2500- stred_od_zadu; // Nastaví aktuální pozici na střed
+  jed_a_chytej_puky((aktualni_pozice.y- stred_od_predu- 200), false, false); // jede do levé krabice
+  turn_on_spot(90); // otočí se o 90 stupňů
+  open_l_box(); // Otevře levý box --- cervene -- souperovi puky
+  jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false); // jede do levé krabice
+  close_l_box(); // Zavře levý box
+  turn_on_spot(182); // otočí se o 90 stupňů
+  back_buttons(80); // otočí se o 180 stup
+  forward(60, 70); // Přejede do středu
+  turn_on_spot(-90); // otočí se o 90 stupňů
+  back_buttons(80); // otočí se o 180 stupňů
+  forward(60, 70); // Přejede do středu
+  delay(200);
+  aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
+  aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
+  open_r_box(); // Otevře pravý box --- modre -- svoje puky
+  forward(100, 60);
+  aktualni_pozice.y = 450; // Nastaví aktuální pozici na střed
+  close_r_box(); // Zavře pravý box
+  //////////////////////////////////////////////////
+  //prvni kolo ujeto!!!
+  ////////////////////////////////////////
+  jed_a_chytej_puky(1500 -aktualni_pozice.y, false);
+  turn_on_spot(90); // otočí se o 90 stupňů
+  back_buttons(80); // otočí se o 180 stupňů
+  aktualni_pozice.x =stred_od_zadu; // Nastaví aktuální pozici na střed
+  jed_a_chytej_puky(2000 - aktualni_pozice.x, true);
+  turn_on_spot(90);
+  jed_a_chytej_puky(600, false, false);
+  turn_on_spot(90); // otočí se o 90 stupňů
+  back_buttons(80); // otočí se o 180 stupňů
+  aktualni_pozice.x = 2500- stred_od_zadu; // Nastaví aktuální pozici na střed
+  jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false); // jede do pravé krabice
+  turn_on_spot(90); // otočí se o 90 stupňů
+  back_buttons(80); // otočí se o 180 stupňů
+  forward(60, 70); // Přejede do středu
+  turn_on_spot(90); // otočí se o 90 stupňů
+  forward(60, 70); // Přejede do středu
+  turn_on_spot(-90); // otočí se o 90 stupňů
+  aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
+  aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
+  open_r_box(); // Otevře pravý box --- modre -- svoje puky
+  forward(100, 60);
+  aktualni_pozice.y = 450; // Nastaví aktuální pozici na střed
+  close_r_box(); // Zavře pravý box
+
+
+
+  // forward(130, 70); // Přejede do středu
+  // close_r_box(); // Zavře pravý box
+  // rkBuzzerSet(true);
+  // delay(500);
+  // rkBuzzerSet(false);
+  // delay(500);
+  // rkBuzzerSet(true);
+  // delay(500);
+  // rkBuzzerSet(false);
+
+      // int distance2 = 1000;
+      // Serial.printf("musi_jet::: M1_pos: %d, M4_pos: %d\n", MmToTicks(distance2), MmToTicks(distance2));
+      // xTaskCreate(ChytejPukyTask, "ChytejPuky", 2048, NULL, 1, &chytejPukyHandle);
+      // setMotorsPower(20000, 20000); // Nastaví motory na 20000
+      // while(M4_pos < MmToTicks(distance2) && M1_pos < MmToTicks(distance2)) {
+      //     man.motor(rb::MotorId::M4).requestInfo([&](rb::Motor& info) {
+      //         M4_pos = info.position();
+      //     });
+      //     man.motor(rb::MotorId::M1).requestInfo([&](rb::Motor& info) {
+      //        M1_pos = -info.position();
+      //     });
+      //     Serial.printf("[ENCODERY] M4_pos: %d\n", M4_pos);
+      //     if(M1_pos > 200 && M4_pos > 200) {
+      //       zkontroluj_pid(20000, M1_pos, M4_pos);
+      //     }
+      //     if((rkUltraMeasure(1) < 150 && (rkUltraMeasure(1) > 30)) || ((rkUltraMeasure(2) < 150) && (rkUltraMeasure(2) > 30))) {
+      //       Serial.println("Zastavuji, narazil na soupere!");
+      //       setMotorsPower(0, 0); // Zastaví motory
+      //       delay(1000);
+      //       if((rkUltraMeasure(1) < 150 && (rkUltraMeasure(1) < 30)) || ((rkUltraMeasure(2) < 150) && (rkUltraMeasure(2) < 30))){
+      //           rkBuzzerSet(true);
+      //           delay(500);
+      //           rkBuzzerSet(false);
+      //           break;
+      //       }
+      //     }
+      //     delay(10);
+      // }
+      // aktualni_pozice.x = (TicksToMm(M1_pos) + 350); // Nastaví aktuální pozici na střed
+      // Serial.printf("Aktualni pozice: x: %d, y: %d\n", aktualni_pozice.x, aktualni_pozice.y);
+      // vTaskDelete(chytejPukyHandle);
+      // chytejPukyHandle = NULL; // Uvolníme task, pokud běžel
+      // setMotorsPower(0, 0); // Zastaví motory
+      // turn_on_spot(90); // otočí se
+      // back_buttons(40); // otočí se o 180 stupňů
+      // man.motor(rb::MotorId::M1).setCurrentPosition(0);
+      // man.motor(rb::MotorId::M4).setCurrentPosition(0);
+      // M1_pos = 0;
+      // M4_pos = 0;
+      // aktualni_pozice.y = 2500- stred_od_zadu; // Nastaví aktuální pozici na střed
+      // Serial.printf("Aktualni pozice: x: %d, y: %d\n", aktualni_pozice.x, aktualni_pozice.y);
+      // xTaskCreate(ChytejPukyTask, "ChytejPuky", 2048, NULL, 1, &chytejPukyHandle);
+      // int distance3 = aktualni_pozice.y - stred_od_predu ; // Vzdálenost do levé krabice
+      // setMotorsPower(20000, 20000); // Nastaví motory na 20000
+      // Serial.printf("musi_jet::: M1_pos: %d, M4_pos: %d\n", MmToTicks(distance1), MmToTicks(distance1));
+      // while(M4_pos < MmToTicks(distance1) && M1_pos < MmToTicks(distance1)) {
+      //         man.motor(rb::MotorId::M4).requestInfo([&](rb::Motor& info) {
+      //             M4_pos = info.position();
+      //         });
+      //         man.motor(rb::MotorId::M1).requestInfo([&](rb::Motor& info) {
+      //           M1_pos = -info.position();
+      //         });
+      //         Serial.printf("[ENCODERY] M4_pos: %d\n", M4_pos);
+      //         if(M1_pos > 200 && M4_pos > 200) {
+      //           zkontroluj_pid(20000, M1_pos, M4_pos);
+      //         }
+      //         if((rkUltraMeasure(1) < 150 && (rkUltraMeasure(1) > 30)) || ((rkUltraMeasure(2) < 150) && (rkUltraMeasure(2) > 30))) {
+      //           Serial.println("Zastavuji, narazil na soupere!");
+      //           setMotorsPower(0, 0); // Zastaví motory
+      //           delay(1000);
+      //           if((rkUltraMeasure(1) < 150 && (rkUltraMeasure(1) < 30)) || ((rkUltraMeasure(2) < 150) && (rkUltraMeasure(2) < 30))){
+      //               rkBuzzerSet(true);
+      //               delay(500);
+      //               rkBuzzerSet(false);
+      //               break;
+      //           }
+      //         }
+      //         delay(10);
+      //     }
+      // vTaskDelete(chytejPukyHandle);
+      // chytejPukyHandle = NULL; // Uvolníme task, pokud běžel
+      // setMotorsPower(0, 0); // Zastaví motory
+      // M1_pos = 0;
+      // M4_pos = 0;
+      // aktualni_pozice.y = aktualni_pozice.y - TicksToMm(M1_pos);
+      // Serial.printf("Aktualni pozice: x: %d, y: %d\n", aktualni_pozice.x, aktualni_pozice.y);
+      // turn_on_spot(90); // otočí se o 90 stupňů
+      // open_l_box(); // Otevře levý box --- cervene -- souperovi puky
+      // forward(aktualni_pozice.x - 250, 70);
+      // close_l_box(); // Zavře levý box
+      // turn_on_spot(90); // otočí se o 90 stupňů
+      // back_buttons(40); // otočí se o 180 stup
+      // forward(60, 70); // Přejede do středu
+      // open_r_box(); // Otevře pravý box --- modre -- svoje puky
+      // forward(1000, 70); // Přejede do středu
 }
 
 // void modra(){
@@ -471,23 +637,20 @@ void loop() {
       Serial.println("Cesta dokončena, zastavuji motory.");
       setMotorsPower(0, 0); // Zastaví motory
   }
-  else if(rkButtonIsPressed(BTN_DOWN)) {
-    delay(3000);
-    back_buttons(70);
-  }
   else if(rkButtonIsPressed(BTN_LEFT)) {
     zavreni_dvirek();
     close_l_box();
     close_r_box();
     delay(3000);
-    setMotorsPower(20000, 20000); // Oba motory vpřed
     modra();
   }
   else if(rkButtonIsPressed(BTN_ON)){
-    zavreni_dvirek();
-    delay(3000);
-    setMotorsPower(20000, 20000); // Oba motory vpřed
-    xTaskCreate(ChytejPukyTask, "ChytejPuky", 2048, NULL, 1, &chytejPukyHandle);
+    rkServosSetPosition(3, 0); // Servo 1 nastaví pnuti po 3minutach 90°
+    delay(2000);
+    rkServosSetPosition(3, -90); // Servo 1 nastaví pnuti po 3minutach 90°
+    delay(2000);
+    rkServosSetPosition(3, 0); // Servo 1 nastaví pnuti po 3minutach 90°
+
   }
   // if (rkButtonIsPressed(BTN_UP)) {
   //     s_s_move(bus, 0, 150, 80.0); // nahoru
@@ -551,6 +714,63 @@ void loop() {
        delay(300);
    }
  }
+ else if(rkButtonIsPressed(BTN_DOWN)) {
+    Serial.println("Zahajuji TEST VSECH KOMPONENT...");
+    // 1. Pohyb vpřed
+    setMotorsPower(15000, 15000);
+    delay(1000); // Jede 1 sekundu vpřed
+    setMotorsPower(0, 0);
+    Serial.println("Test: Pohyb vpřed OK");
+
+    // 2. Použití zadních tlačítek (simulace funkce back_buttons)
+    Serial.println("Test: Zadní tlačítka (back_buttons)");
+    back_buttons(50); // Otočí se o 180 stupňů (nebo jiná testovací akce)
+
+    // 3. Pohyb servy
+    Serial.println("Test: Serva");
+    open_l_box();
+    delay(500);
+    close_l_box();
+    delay(500);
+    open_r_box();
+    delay(500);
+    close_r_box();
+    delay(500);
+
+        // 4. Pohyb chytrého serva (smart servo)
+    Serial.println("Test: Chytré servo");
+    auto &bus = rkSmartServoBus(1);
+    s_s_move(bus, 0, 90, 100.0); // Nastaví servo na 90°
+    delay(700);
+    s_s_move(bus, 0, 150, 100.0); // Nastaví servo na 150°
+    delay(700);
+    s_s_move(bus, 0, 120, 100.0); // Vrátí zpět na 120°
+    delay(700);
+
+    // 4. Test ultrazvukových senzorů
+    Serial.println("Test: Ultrazvukové senzory");
+    int u1 = rkUltraMeasure(1);
+    int u2 = rkUltraMeasure(2);
+    int u3 = rkUltraMeasure(3);
+    int u4 = rkUltraMeasure(4);
+    Serial.printf("Ultrazvuky: 1=%d mm, 2=%d mm, 3=%d mm, 4=%d mm\n", u1, u2, u3, u4);
+
+    // 5. Test barevných senzorů
+    Serial.println("Test: Barevné senzory");
+    if (rkColorSensorGetRGB("puky", &r1, &g1, &b1)) {
+        Serial.printf("PUKY: R=%.1f G=%.1f B=%.1f\n", r1, g1, b1);
+    } else {
+        Serial.println("PUKY: Sensor nenalezen!");
+    }
+    if (rkColorSensorGetRGB("zem", &r2, &g2, &b2)) {
+        Serial.printf("ZEM: R=%.1f G=%.1f B=%.1f\n", r2, g2, b2);
+    } else {
+        Serial.println("ZEM: Sensor nenalezen!");
+    }
+
+    Serial.println("Test všech komponent dokončen.");
+    delay(2000); // Krátká pauza po testu
+}
   // if ((digitalRead(Bbutton1) == LOW)){
   //           rkLedYellow(true); // Turn on red LED
   //           rkLedGreen(false); // Turn on red LED
