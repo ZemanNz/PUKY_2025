@@ -134,10 +134,10 @@ DetekceBarvy Detekce_puku() {
          Serial.print("R: "); Serial.print(r1, 3);
          Serial.print(" G: "); Serial.print(g1, 3);
          Serial.print(" B: "); Serial.println(b1, 3);
-        if ((r1 -28) > b1 && (r1-28) > g1) {
+        if ((r1 -38) > b1 && (r1-38) > g1) {
             vysledek.barva = RED;
             vysledek.je_tam = true;
-        } else if ((b1 -28) > r1 && (b1-28) > g1) {
+        } else if ((b1 > 90)&& (b1 -18) > r1 && (b1-18) > g1) {
             vysledek.barva = BLUE;
             vysledek.je_tam = true;
         }
@@ -156,17 +156,21 @@ DetekceBarvy Kde_jsme() {
     delay(20);
     rkColorSensorGetRGB("zem", &r2, &g2, &b2);
     delay(20);
+    rkColorSensorGetRGB("zem", &r2, &g2, &b2);
+    delay(20);
 
     if (rkColorSensorGetRGB("zem", &r2, &g2, &b2)) {
-        Serial.print("R: "); Serial.print(r2, 3);
-        Serial.print(" G: "); Serial.print(g2, 3);
-        Serial.print(" B: "); Serial.println(b2, 3);
-        if ((r2 - 20) > b2 && (r2 - 20) > g2) {
+        Serial.print("ZEM_R: "); Serial.print(r2, 3);
+        Serial.print(" ZEM_G: "); Serial.print(g2, 3);
+        Serial.print(" ZEM_B: "); Serial.println(b2, 3);
+        if ((r2 -38) > b2 && (r2-38) > g2) {
             vysledek.barva = RED;
             vysledek.je_tam = true;
-        } else if ((b2 - 20) > r2 && (b2 - 20) > g2) {
+            Serial.println("Jsem na červené zemi.");
+        } else if ((b2 -28) > r2 && (b2-5) > g2) {//else if ((b2 > 90)&& (b2 -18) > r2 && (b2-18) > g2) {
             vysledek.barva = BLUE;
             vysledek.je_tam = true;
+            Serial.println("Jsem na modré zemi.");
         } else {
             vysledek.je_tam = false;
         }
@@ -215,9 +219,9 @@ void ChytejPukyTask(void *pvParameters) {
                 puk_do_l_boxu();
                 setMotorsPower(0, 0); // zastaví motory
                 delay(300);
-                rkMotorsDrive(60, 60, 100, 100);
+                rkMotorsDrive(70, 70, 100, 100);
                 zavreni_dvirek();
-                delay(200);
+                delay(400);
                 otevreni_prepazky();
                 setMotorsPower(20000, 20000); // zastaví motory
                 puck_in_l_box++;
@@ -229,9 +233,9 @@ void ChytejPukyTask(void *pvParameters) {
                   puk_do_r_boxu();
                   setMotorsPower(0, 0); // zastaví motory
                   delay(300);
-                  rkMotorsDrive(60, 60, 100, 100);
+                  rkMotorsDrive(70, 70, 100, 100);
                   zavreni_dvirek();
-                  delay(200);
+                  delay(400);
                   otevreni_prepazky();
                   setMotorsPower(20000, 20000); // zastaví motory
                   puck_in_r_box++;
@@ -343,28 +347,35 @@ void jed_a_chytej_puky(int distance, bool x, bool kladna = true){
       man.motor(rb::MotorId::M4).setCurrentPosition(0);
       M1_pos = 0;
       M4_pos = 0;
+      zavreni_dvirek();
+}
+
+
+void dojezd_k(int vzdalenost, int speed){
+
+
 }
 
 
 
 void modra(){
   Serial.println("Modra barva");
-  jed_a_chytej_puky(1800 - aktualni_pozice.y, false);
+  jed_a_chytej_puky(2150 - aktualni_pozice.y, false);
   turn_on_spot(90); // otočí se o 90 stupňů
   back_buttons(80); // otočí se o 180 stupňů
-  open_l_box();
   aktualni_pozice.x =stred_od_zadu; // Nastaví aktuální pozici na střed
+  // open_l_box(); // zakomentováno: levý box (červený) v modra()
   delay(100);
-  jed_a_chytej_puky(1200 - aktualni_pozice.x, true);
-  close_l_box(); // Zavře levý box
+  jed_a_chytej_puky(2150 - aktualni_pozice.x, true);
+  // close_l_box(); // Zavře levý box -- zakomentováno: levý box (červený) v modra()
   turn_on_spot(90);
   back_buttons(80);
   aktualni_pozice.y = 2500- stred_od_zadu; // Nastaví aktuální pozici na střed
   jed_a_chytej_puky((aktualni_pozice.y- stred_od_predu- 200), false, false); // jede do levé krabice
   turn_on_spot(90); // otočí se o 90 stupňů
-  open_l_box(); // Otevře levý box --- cervene -- souperovi puky
+  // open_l_box(); // Otevře levý box --- cervene -- souperovi puky -- zakomentováno v modra()
   jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false); // jede do levé krabice
-  close_l_box(); // Zavře levý box
+  // close_l_box(); // Zavře levý box -- zakomentováno v modra()
   turn_on_spot(182); // otočí se o 90 stupňů
   back_buttons(80); // otočí se o 180 stup
   forward(70, 70); // Přejede do středu
@@ -374,7 +385,20 @@ void modra(){
   forward(70, 70); // Přejede do středu
   delay(200);
   aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
-  aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
+  aktualni_pozice.y = 350; // Nastaví aktuální pozici na středauto 
+  auto a = Kde_jsme(); // Zjistí, kde jsme
+  if (a.je_tam && a.barva == BLUE) {
+    Serial.println("Jsem na modré barvě.");
+  } else {
+    Serial.println("Nejsem na modré barvě, hledaM MODROUA");
+    while(!a.je_tam || a.barva != BLUE) { // dokud nejsme na modré barvě
+     back_buttons(80); // otočí se o 180 stupňů
+     turn_on_spot(-90); // otočí se o 90 stupňů
+     jed_a_chytej_puky(2800, true, false); // jede do středu
+    
+      a = Kde_jsme(); // Zjistí, kde jsme
+    }
+  }
   open_r_box(); // Otevře pravý box --- modre -- svoje puky
   forward(100, 60);
   aktualni_pozice.y = 450; // Nastaví aktuální pozici na střed
@@ -382,11 +406,73 @@ void modra(){
   //////////////////////////////////////////////////
   //prvni kolo ujeto!!!
   ////////////////////////////////////////
+  jed_a_chytej_puky(1850 -aktualni_pozice.y, false);
+  turn_on_spot(90); // otočí se o 90 stupňů
+  back_buttons(80); // otočí se o 180 stupňů
+  aktualni_pozice.x =stred_od_zadu; // Nastaví aktuální pozici na střed
+  jed_a_chytej_puky(2050 - aktualni_pozice.x, true);
+  turn_on_spot(90);
+  // open_l_box(); // Otevře levý box --- cervene -- souperovi puky -- zakomentováno v modra()
+  jed_a_chytej_puky(600, false, false);
+  // close_l_box(); // Zavře levý box -- zakomentováno v modra()
+  turn_on_spot(90); // otočí se o 90 stupňů
+  back_buttons(80); // otočí se o 180 stupňů
+  // open_l_box(); // Otevře pravý box --- modre -- svoje puky -- zakomentováno v modra()
+  aktualni_pozice.x = 2500- stred_od_zadu; // Nastaví aktuální pozici na střed
+  jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false); // jede do pravé krabice
+  turn_on_spot(180); // otočí se o 90 stupňů
+  // close_l_box(); // Zavře levý box -- zakomentováno v modra()
+  back_buttons(80); // otočí se o 180 stupňů
+  forward(70, 70); // Přejede do středu
+  turn_on_spot(-90); // otočí se o 90 stupňů
+  delay(1000);
+  back_buttons(80); // otočí se o 180 stupňů
+  forward(70, 70); // Přejede do středu
+  aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
+  aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
+  open_r_box(); // Otevře pravý box --- modre -- svoje puky
+  forward(180, 60);
+  aktualni_pozice.y = 450; // Nastaví aktuální pozici na střed
+  close_r_box(); // Zavře pravý box
+  //////////////////////////////////////////////////////////
+  // druhé kolo ujeto!!!
+  ////////////////////////////////////////
   jed_a_chytej_puky(1500 -aktualni_pozice.y, false);
   turn_on_spot(90); // otočí se o 90 stupňů
   back_buttons(80); // otočí se o 180 stupňů
   aktualni_pozice.x =stred_od_zadu; // Nastaví aktuální pozici na střed
-  jed_a_chytej_puky(2000 - aktualni_pozice.x, true);
+  jed_a_chytej_puky(1500 - aktualni_pozice.x, true);
+  turn_on_spot(90);
+  // open_l_box(); // Otevře levý box --- cervene -- souperovi puky -- zakomentováno v modra()
+  jed_a_chytej_puky(600, false, false);
+  // close_l_box(); // Zavře levý box -- zakomentováno v modra()
+  turn_on_spot(90); // otočí se o 90 stupňů
+  back_buttons(80); // otočí se o 180 stupňů
+  // open_l_box(); // Otevře pravý box --- modre -- svoje puky -- zakomentováno v modra()
+  aktualni_pozice.x = 2500- stred_od_zadu; // Nastaví aktuální pozici na střed
+  jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false); // jede do pravé krabice
+  turn_on_spot(180); // otočí se o 90 stupňů
+  // close_l_box(); // Zavře levý box -- zakomentováno v modra()
+  back_buttons(80); // otočí se o 180 stupňů
+  forward(70, 70); // Přejede do středu
+  turn_on_spot(-90); // otočí se o 90 stupňů
+  delay(1000);
+  back_buttons(80); // otočí se o 180 stupňů
+  forward(70, 70); // Přejede do středu
+  aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
+  aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
+  open_r_box(); // Otevře pravý box --- modre -- svoje puky
+  forward(180, 60);
+  aktualni_pozice.y = 450; // Nastaví aktuální pozici na střed
+  close_r_box(); // Zavře pravý box
+
+////////treti kolo ujeto//////////////////////
+
+jed_a_chytej_puky(1000 -aktualni_pozice.y, false);
+  turn_on_spot(90); // otočí se o 90 stupňů
+  back_buttons(80); // otočí se o 180 stupňů
+  aktualni_pozice.x =stred_od_zadu; // Nastaví aktuální pozici na střed
+  jed_a_chytej_puky(1000 - aktualni_pozice.x, true);
   turn_on_spot(90);
   open_l_box(); // Otevře levý box --- cervene -- souperovi puky
   jed_a_chytej_puky(600, false, false);
@@ -410,43 +496,8 @@ void modra(){
   forward(180, 60);
   aktualni_pozice.y = 450; // Nastaví aktuální pozici na střed
   close_r_box(); // Zavře pravý box
-  //////////////////////////////////////////////////////////
-  // druhé kolo ujeto!!!
-  ////////////////////////////////////////
-  back_buttons(80); // otočí se o 180 stupňů
-  forward(70, 70); // Přejede do středu
-  turn_on_spot(90); // otočí se o 90 stupňů
-  back_buttons(80); // otočí se o 180 stupňů
-  forward(70, 70); // Přejede do středu
-  aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
-  aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
-  jed_a_chytej_puky(2100 -aktualni_pozice.x- stred_od_predu, true); // jede do levé krabice
-  open_l_box(); // Otevře levý box --- cervene -- souperovi puky
-  turn_on_spot(-90); // otočí se o 90 stupňů
-  delay(1000);
-  close_l_box(); // Zavře levý box
-  back_buttons(80); // otočí se o 180 stupňů
-  aktualni_pozice.y = 2500 - stred_od_zadu; // Nastaví aktuální pozici na střed
-  jed_a_chytej_puky(800 - aktualni_pozice.y, false);
-  turn_on_spot(-90); // otočí se o 90 stupňů
-  delay(1000);
-  close_l_box(); // Zavře levý box
-  back_buttons(80); // otočí se o 180 stupňů
-  aktualni_pozice.x =2500 - stred_od_zadu; // Nastaví aktuální pozici na střed
-  open_l_box(); // Otevře pravý box --- modre -- svoje puky
-  jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu- 200, true, false); // jede do pravé krabice
-  close_l_box(); 
-  turn_on_spot(180);
-  back_buttons(80); // otočí se o 180 stupňů
-  forward(70, 70); // Přejede do středu
-  turn_on_spot(-90); // otočí se o 90 stupňů
-  delay(1000);
-  back_buttons(80); // otočí se o 180 stupňů
-  forward(70, 70); // Přejede do středu
-  open_r_box(); // Otevře levý box --- cervene -- souperovi puky
-  forward(180, 60);
-  close_r_box(); // Zavře levý box
-  aktualni_pozice.y = 450; // Nastaví aktuální pozici na střed
+
+
   //////////////////////////////////////////////////////////
 
   rkBuzzerSet(true);
@@ -466,22 +517,23 @@ void modra(){
 
 void cervena(){
   Serial.println("Cervena barva");
-  jed_a_chytej_puky(1800 - aktualni_pozice.y, false);
+  jed_a_chytej_puky(2150 - aktualni_pozice.y, false);
   turn_on_spot(90); // otočí se o 90 stupňů
   back_buttons(80); // otočí se o 180 stupňů
-  open_r_box();
+  // open_r_box(); // zakomentováno: pravý box (modrý) v cervena()
   aktualni_pozice.x =stred_od_zadu; // Nastaví aktuální pozici na střed
   delay(100);
-  jed_a_chytej_puky(1200 - aktualni_pozice.x, true);
-  close_r_box(); // Zavře levý box
+  jed_a_chytej_puky(2150 - aktualni_pozice.x, true);
+  // close_r_box(); // Zavře pravý box -- zakomentováno: pravý box (modrý) v cervena()
+  
   turn_on_spot(90);
   back_buttons(80);
   aktualni_pozice.y = 2500- stred_od_zadu; // Nastaví aktuální pozici na střed
   jed_a_chytej_puky((aktualni_pozice.y- stred_od_predu- 200), false, false); // jede do levé krabice
   turn_on_spot(90); // otočí se o 90 stupňů
-  open_r_box(); // Otevře levý box --- cervene -- souperovi puky
+  // open_r_box(); // Otevře pravý box --- cervene -- souperovi puky -- zakomentováno v cervena()
   jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false); // jede do levé krabice
-  close_r_box(); // Zavře levý box
+  // close_r_box(); // Zavře pravý box -- zakomentováno v cervena()
   turn_on_spot(182); // otočí se o 90 stupňů
   back_buttons(80); // otočí se o 180 stup
   forward(70, 70); // Přejede do středu
@@ -499,22 +551,22 @@ void cervena(){
   //////////////////////////////////////////////////
   //prvni kolo ujeto!!!
   ////////////////////////////////////////
-  jed_a_chytej_puky(1500 -aktualni_pozice.y, false);
+  jed_a_chytej_puky(1850 -aktualni_pozice.y, false);
   turn_on_spot(90); // otočí se o 90 stupňů
   back_buttons(80); // otočí se o 180 stupňů
   aktualni_pozice.x =stred_od_zadu; // Nastaví aktuální pozici na střed
-  jed_a_chytej_puky(2000 - aktualni_pozice.x, true);
+  jed_a_chytej_puky(2050 - aktualni_pozice.x, true);
   turn_on_spot(90);
   open_r_box(); // Otevře levý box --- cervene -- souperovi puky
   jed_a_chytej_puky(600, false, false);
   close_r_box(); // Zavře levý box
   turn_on_spot(90); // otočí se o 90 stupňů
   back_buttons(80); // otočí se o 180 stupňů
-  open_r_box(); // Otevře pravý box --- modre -- svoje puky
+  // open_r_box(); // Otevře pravý box --- modre -- svoje puky -- zakomentováno v cervena()
   aktualni_pozice.x = 2500- stred_od_zadu; // Nastaví aktuální pozici na střed
   jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false); // jede do pravé krabice
   turn_on_spot(180); // otočí se o 90 stupňů
-  close_r_box(); // Zavře levý box
+  // close_r_box(); // Zavře pravý box -- zakomentováno v cervena()
   back_buttons(80); // otočí se o 180 stupňů
   forward(70, 70); // Přejede do středu
   turn_on_spot(-90); // otočí se o 90 stupňů
@@ -530,41 +582,69 @@ void cervena(){
   //////////////////////////////////////////////////////////
   // druhé kolo ujeto!!!
   ////////////////////////////////////////
+  jed_a_chytej_puky(1500 -aktualni_pozice.y, false);
+  turn_on_spot(90); // otočí se o 90 stupňů
+  back_buttons(80); // otočí se o 180 stupňů
+  aktualni_pozice.x =stred_od_zadu; // Nastaví aktuální pozici na střed
+  jed_a_chytej_puky(1500 - aktualni_pozice.x, true);
+  turn_on_spot(90);
+  // open_r_box(); // Otevře pravý box --- cervene -- souperovi puky -- zakomentováno v cervena()
+  jed_a_chytej_puky(600, false, false);
+  // close_r_box(); // Zavře pravý box -- zakomentováno v cervena()
+  turn_on_spot(90); // otočí se o 90 stupňů
+  back_buttons(80); // otočí se o 180 stupňů
+  // open_r_box(); // Otevře pravý box --- modre -- svoje puky -- zakomentováno v cervena()
+  aktualni_pozice.x = 2500- stred_od_zadu; // Nastaví aktuální pozici na střed
+  jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false); // jede do pravé krabice
+  turn_on_spot(180); // otočí se o 90 stupňů
+  // close_r_box(); // Zavře pravý box -- zakomentováno v cervena()
   back_buttons(80); // otočí se o 180 stupňů
   forward(70, 70); // Přejede do středu
-  turn_on_spot(90); // otočí se o 90 stupňů
+  turn_on_spot(-90); // otočí se o 90 stupňů
+  delay(1000);
   back_buttons(80); // otočí se o 180 stupňů
   forward(70, 70); // Přejede do středu
   aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
   aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
-  jed_a_chytej_puky(2100 -aktualni_pozice.x - stred_od_predu, true); // jede do levé krabice
-  open_r_box(); // Otevře levý box --- cervene -- souperovi puky
-  turn_on_spot(-90); // otočí se o 90 stupňů
-  delay(1000);
-  close_r_box(); // Zavře levý box
+  open_l_box(); // Otevře pravý box --- modre -- svoje puky
+  forward(180, 60);
+  aktualni_pozice.y = 450; // Nastaví aktuální pozici na střed
+  close_l_box(); // Zavře pravý box
+
+    //////////////////////////////////////////////////////////
+  // tretí kolo ujeto!!!
+  ////////////////////////////////////////
+
+    jed_a_chytej_puky(1000 -aktualni_pozice.y, false);
+  turn_on_spot(90); // otočí se o 90 stupňů
   back_buttons(80); // otočí se o 180 stupňů
   aktualni_pozice.x =stred_od_zadu; // Nastaví aktuální pozici na střed
-  jed_a_chytej_puky(800 - aktualni_pozice.y, true);
-  turn_on_spot(-90); // otočí se o 90 stupňů
-  delay(1000);
-  close_r_box(); // Zavře levý box
-  delay(300);
+  jed_a_chytej_puky(1000 - aktualni_pozice.x, true);
+  turn_on_spot(90);
+  // open_r_box(); // Otevře pravý box --- cervene -- souperovi puky -- zakomentováno v cervena()
+  jed_a_chytej_puky(600, false, false);
+  // close_r_box(); // Zavře pravý box -- zakomentováno v cervena()
+  turn_on_spot(90); // otočí se o 90 stupňů
   back_buttons(80); // otočí se o 180 stupňů
-  aktualni_pozice.x =2500 - stred_od_zadu; // Nastaví aktuální pozici na střed
-  open_r_box(); // Otevře pravý box --- modre -- svoje puky
-  jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu- 200, false);
-  close_r_box(); 
-  turn_on_spot(180);
-  back_buttons(80); // otočí se o 180 stupňů
-  forward(70, 70); // Přejede do středu
-  turn_on_spot(-90); // otočí se o 90 stupňů
-  delay(1000);
+  // open_r_box(); // Otevře pravý box --- modre -- svoje puky -- zakomentováno v cervena()
+  aktualni_pozice.x = 2500- stred_od_zadu; // Nastaví aktuální pozici na střed
+  jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false); // jede do pravé krabice
+  turn_on_spot(180); // otočí se o 90 stupňů
+  // close_r_box(); // Zavře pravý box -- zakomentováno v cervena()
   back_buttons(80); // otočí se o 180 stupňů
   forward(70, 70); // Přejede do středu
-  open_l_box(); // Otevře levý box --- cervene -- souperovi puky
+  turn_on_spot(-90); // otočí se o 90 stupňů
+  delay(1000);
+  back_buttons(80); // otočí se o 180 stupňů
+  forward(70, 70); // Přejede do středu
+  aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
+  aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
+  open_l_box(); // Otevře pravý box --- modre -- svoje puky
   forward(180, 60);
-  close_l_box(); // Zavře levý box
   aktualni_pozice.y = 450; // Nastaví aktuální pozici na střed
+  close_l_box(); // Zavře pravý box
+
+
   //////////////////////////////////////////////////////////
 
   rkBuzzerSet(true);
@@ -613,14 +693,16 @@ void loop() {
     zavreni_dvirek();
     close_l_box();
     close_r_box();
-    delay(3000);
+    xTaskCreate(StopTask, "StopTask", 1024, NULL, 1, NULL);
+    delay(1000);
     modra();
   }
   else if(rkButtonIsPressed(BTN_RIGHT)) {
     zavreni_dvirek();
     close_l_box();
     close_r_box();
-    delay(3000);
+    xTaskCreate(StopTask, "StopTask", 1024, NULL, 1, NULL);
+    delay(1000);
     cervena();
   }
   else if(rkButtonIsPressed(BTN_ON)){
@@ -660,7 +742,45 @@ void loop() {
     close_l_box(); // Zavře levý box
     aktualni_pozice.y = 450; // Nastaví aktuální pozici na středů
   }
-    if (rkButtonIsPressed(BTN_OFF)) {//dolu
+  if(rkButtonIsPressed(BTN_UP)){
+    // while(true){
+    //   auto a = Kde_jsme(); // Zjistí, kde jsme
+    //   delay(300);
+    // }
+    auto a = Kde_jsme(); // Zjistí, kde jsme
+  if (a.je_tam && a.barva == BLUE) {
+    Serial.println("Jsem na modré barvě.");
+  } else {
+    Serial.println("Nejsem na modré barvě, hledaM MODROUA");
+    turn_on_spot(90); // otočí se o 90 stupňů
+    while(!a.je_tam || a.barva != BLUE) { // dokud nejsme na modré barvě
+     back_buttons(80); // otočí se o 180 stupňů
+     a = Kde_jsme(); // Zjistí, kde jsme
+     if(a.je_tam && a.barva == BLUE) {
+      Serial.println("Jsem na modré barvě.");
+      rkBuzzerSet(true);
+      delay(1000);
+      rkBuzzerSet(false);
+      break;
+     }
+     jed_a_chytej_puky(2800, true, false); // jede do středu
+      turn_on_spot(-90); // otočí se o 90 stupňů
+      a = Kde_jsme(); // Zjistí, kde jsme
+     if(a.je_tam && a.barva == BLUE) {
+      Serial.println("Jsem na modré barvě.");
+      rkBuzzerSet(true);
+      delay(1000);
+      rkBuzzerSet(false);
+      turn_on_spot(-182); // otočí se o 90 stupňů
+     back_buttons(80); // otočí se o 180 stupňů
+      break;
+     }
+      delay(800);
+
+    }
+  }
+  }
+  if (rkButtonIsPressed(BTN_OFF)) {//dolu
      int stop_time= 1000000;
      for(int i=0; i < stop_time; i+=300) {
          int distance1 = rkUltraMeasure(1);

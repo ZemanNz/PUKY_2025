@@ -50,5 +50,6 @@
         "typeinfo": "cpp",
         "random": "cpp",
         "thread": "cpp"
-    }
+    },
+    "idf.portWin": "COM13"
 }

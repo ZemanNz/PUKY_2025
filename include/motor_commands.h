@@ -281,7 +281,9 @@ void back_buttons(int speed)
         // Serial.printf("[ACCEL] i: %d | M1_pos: %d | M4_pos: %d | odchylka: %d | integral: %d\n", i, M1_pos, M4_pos, odchylka, integral);
         delay(8);
     }
-    while (true)
+    int stop_time = 8000; // časový limit pro dorovnání
+    unsigned long start_time = millis();
+   while ( (millis() - start_time < stop_time) )
     {
         // Získání aktuálních pozic
         man.motor(rb::MotorId::M1).requestInfo([&](rb::Motor& info) {
