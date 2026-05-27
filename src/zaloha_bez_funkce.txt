@@ -396,7 +396,7 @@ void dojed_na_svoje(bool modra){
       jed_a_chytej_puky(2800, true, false); // jede do středu
       a = Kde_jsme(); // Zjistí, kde jsme
       if(a.je_tam && a.barva == RED) {
-        Serial.println("reddddddddddddddddddd");
+        Serial.println("Jsem na modré barvě.");
         rkBuzzerSet(true);
         delay(1000);
         rkBuzzerSet(false);
@@ -448,7 +448,7 @@ void modra(){
   delay(200);
   aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
   aktualni_pozice.y = 350; // Nastaví aktuální pozici na středauto 
-  dojed_na_svoje(true);
+  //dojed_na_svoje(true);
   open_r_box(); // Otevře pravý box --- modre -- svoje puky
   forward(100, 60);
   aktualni_pozice.y = 450; // Nastaví aktuální pozici na střed
@@ -480,7 +480,7 @@ void modra(){
   forward(70, 70); // Přejede do středu
   aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
   aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
-  dojed_na_svoje(true);
+  //dojed_na_svoje(true);
   open_r_box(); // Otevře pravý box --- modre -- svoje puky
   forward(180, 60);
   aktualni_pozice.y = 450; // Nastaví aktuální pozici na střed
@@ -512,7 +512,7 @@ void modra(){
   forward(70, 70); // Přejede do středu
   aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
   aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
-  dojed_na_svoje(true);
+  //dojed_na_svoje(true);
   open_r_box(); // Otevře pravý box --- modre -- svoje puky
   forward(180, 60);
   aktualni_pozice.y = 450; // Nastaví aktuální pozici na střed
@@ -544,7 +544,7 @@ jed_a_chytej_puky(1000 -aktualni_pozice.y, false);
   forward(70, 70); // Přejede do středu
   aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
   aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
-  dojed_na_svoje(true);
+  //dojed_na_svoje(true);
   open_r_box(); // Otevře pravý box --- modre -- svoje puky
   forward(180, 60);
   aktualni_pozice.y = 450; // Nastaví aktuální pozici na střed
@@ -597,7 +597,7 @@ void cervena(){
   delay(200);
   aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
   aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
-  dojed_na_svoje(false);
+  //dojed_na_svoje(false);
   open_l_box(); // Otevře pravý box --- modre -- svoje puky
   forward(100, 60);
   aktualni_pozice.y = 450; // Nastaví aktuální pozici na střed
@@ -629,7 +629,7 @@ void cervena(){
   forward(70, 70); // Přejede do středu
   aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
   aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
-  dojed_na_svoje(false);
+  //dojed_na_svoje(false);
   open_l_box(); // Otevře pravý box --- modre -- svoje puky
   forward(180, 60);
   aktualni_pozice.y = 450; // Nastaví aktuální pozici na střed
@@ -661,7 +661,7 @@ void cervena(){
   forward(70, 70); // Přejede do středu
   aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
   aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
-  dojed_na_svoje(false);
+  //dojed_na_svoje(false);
   open_l_box(); // Otevře pravý box --- modre -- svoje puky
   forward(180, 60);
   aktualni_pozice.y = 450; // Nastaví aktuální pozici na střed
@@ -695,7 +695,7 @@ void cervena(){
   forward(70, 70); // Přejede do středu
   aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
   aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
-  dojed_na_svoje(false);
+  //dojed_na_svoje(false);
   open_l_box(); // Otevře pravý box --- modre -- svoje puky
   forward(180, 60);
   aktualni_pozice.y = 450; // Nastaví aktuální pozici na střed
