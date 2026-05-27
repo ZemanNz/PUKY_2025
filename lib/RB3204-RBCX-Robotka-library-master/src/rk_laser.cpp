@@ -3,7 +3,7 @@
 #include <string.h>
 #include "robotka.h"
 
-#define MAX_LASERS  2
+#define MAX_LASERS  6
 
 struct LaserSensor {
   const char*         name;
@@ -11,12 +11,13 @@ struct LaserSensor {
   TwoWire*            bus;
   uint8_t             xshut_pin;
   uint8_t             address;
+  bool                initialized; 
 };
 static LaserSensor laserSensors[MAX_LASERS];
 static uint8_t      laserCount = 0;
 
 /**
- * @brief Inicializuje jeden VL53L0X na zadané sběrnici a XSHUT pinu, přepíše mu adresu.
+ * @brief Inicializuje jeden VL53L0X na zadané sběrnici a XSHUT pinu, přepíše mu  adresu.
  */
 void rk_laser_init_basic(const char*       name,
                          TwoWire&          bus,
@@ -34,12 +35,7 @@ void rk_laser_init_basic(const char*       name,
   s.bus       = &bus;
   s.xshut_pin = xshut_pin;
   s.address   = new_address;
-
- 
-  // 1) Reset senzoru
-  pinMode(xshut_pin, OUTPUT);
-  digitalWrite(xshut_pin, LOW);
-  delay(200);
+  s.initialized = false;
 
   // 2) Vyjmi z resetu
   digitalWrite(xshut_pin, HIGH);
@@ -62,7 +58,7 @@ void rk_laser_init_basic(const char*       name,
       return;
     }
   }  // 4) Přepiš adresu v registrech
-  
+  s.initialized = true;
 }
 
 /**
@@ -72,6 +68,9 @@ int rk_laser_measure_basic(const char* name) {
   for (uint8_t i = 0; i < laserCount; i++) {
     LaserSensor& s = laserSensors[i];
     if (strcmp(s.name, name) == 0) {
+      if (!s.initialized) {
+        return -1;
+      }
       VL53L0X_RangingMeasurementData_t m;
       s.lox->rangingTest(&m, /*debug=*/false);
       if (m.RangeStatus != 4) {

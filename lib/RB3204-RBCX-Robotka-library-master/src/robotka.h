@@ -56,20 +56,118 @@ struct rkPinsConfig {
  */
 struct rkConfig {
     rkConfig()
-        :  motor_id_left(4)
+        : prevod_motoru(1983.3f) // pro 12v ==  41.62486f * 48.f, pro 6v == 1981.3f
+        , left_wheel_diameter(61.0) // v mm
+        , right_wheel_diameter(61.0) // v mm
+        , roztec_kol(270.0) // v mm
+        , konstanta_radius_vnejsi_kolo(0.96f) // Korekční faktor pro vnější kolo při zatáčení
+        , konstanta_radius_vnitrni_kolo(0.96f) // Korekční faktor pro vnitřní kolo při zatáčení
+        , korekce_nedotacivosti_left(0.97f)// Korekce nedotáčivosti při otaceni na miste do leva
+        , korekce_nedotacivosti_right(0.97f)// Korekce nedotáčivosti při otaceni na miste do prava
+        , Button1(NULL)
+        , Button2(NULL)
+        , motor_id_left(4)
         , motor_id_right(1)
         , motor_max_power_pct(100)
         , motor_polarity_switch_left(false)
         , motor_polarity_switch_right(true)
         , motor_enable_failsafe(false)
-        , motor_wheel_diameter(67)
-        , motor_max_ticks_per_second(2600)
+        , motor_wheel_diameter(61.0)
+        , motor_max_ticks_per_second(5200) // vyzkousite tak ze spustite funkci max_rychlost() a podle toho nastavite
         , motor_max_acceleration(50000)
         , stupid_servo_min(-1.65f)
-        , stupid_servo_max(1.65f) {
+        , stupid_servo_max(1.65f)
+        , pocet_chytrych_serv(0)
+        , enable_wifi_log(false)
+        , enable_wifi_control_wasd(false)
+        , enable_wifi_terminal(false)
+        , wifi_ssid("robot1234")        // pro wasd a wifi_terminal je to jmeno wifi ktere robot vytvori!!! , pro logovani je to wifi ke ktere se pripoji ----> bacha to jmeno musi byt nejak dlouhy, jinak vam to nepujde prejmenovat
+        , wifi_password("1234robot") {       // pro wasd a wifi_terminal je to heslo wifi ktere robot vytvori!!! , pro logovani je to wifi ke ktere se pripoji ----> bacha to heslo musi byt nejak dlouhy, jinak vam to nepujde prejmenovat
     }
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /**
+     * \brief prevod_motoru - počet ticků enkodéru na jeden mm.
+     * 
+     * Používá se pro přepočet ujeté vzdálenosti na počet ticků enkodéru.
+     * 
+     * Výchozí hodnota je pro 6V motory s koly o průměru 62mm je ´1979.3f´.
+     * 
+     * Vypočítáte tak, že zadáte at ujede robot treba 1000mm s zmerite kolik realne ujedete a touto hodnotou vydelite tuto konstantu.
+     */
+    float prevod_motoru;
+
+    /**
+     * \brief left_wheel_diameter - Průměr levého kola robota v mm.
+     * 
+     * Výchozí hodnota je `62.2` mm.
+     * 
+     * Rozdíl mezi koly vyrovnáte nastavením této hodnoty.
+     */
+    float left_wheel_diameter;
+
+    /**
+     * \brief right_wheel_diameter - Průměr pravého kola robota v mm.
+     * 
+     * Výchozí hodnota je `62.0` mm.
+     * 
+     * Rozdíl mezi koly vyrovnáte nastavením této hodnoty.
+     */
+    float right_wheel_diameter;
+
+    /**
+     * \brief Rozteč kol robota v mm, použito na počítání ujeté vzdálenosti při zatáčení.
+     * 
+     * Pokud jsou kola široká, počítejte spíše s menšímy hodnotami.
+     */
+    float roztec_kol;
+
+    /**
+     * \brief Korekční faktor pro vnější kolo při zatáčení
+     * 
+     * Výchozí hodnota je `1.035f`.
+     */
+    float konstanta_radius_vnejsi_kolo = 1.035f;
+
+    /**
+     * \brief Korekční faktor pro vnitřní kolo při zatáčení
+     * 
+     * Výchozí hodnota je `1.0084f`.
+     */
+    float konstanta_radius_vnitrni_kolo = 1.0084f;
+
+
+    /**
+     * \brief Korekce nedotáčivosti při otáčení na místě doleva
+     * 
+     * Výchozí hodnota je `1.1f`.
+     */
+    float korekce_nedotacivosti_left;
+
+    /**
+     * \brief Korekce nedotáčivosti při otáčení na místě doprava
+     * 
+     * Výchozí hodnota je `1.0f`.
+     */
+    float korekce_nedotacivosti_right;
+
+    /**
+     * \brief Číslo GPIO pro tlačítko v zadu robota na zastavení až se dotkne zdi
+     * 
+     * Výchozí hodnota je `14`, možné je pouýžít třeba 17,34, 35 ...  Ale můžete nastavit na `NULL`, pokud tlačítko nechcete používat.
+     */
+    byte Button1;
+
+    /**
+     * \brief Číslo GPIO pro tlačítko v zadu robota na zastavení až se dotkne zdi
+     * 
+     * Výchozí hodnota je `35`, možné je pouýžít třeba 14,17,34 ...  Ale můžete nastavit na `NULL`, pokud tlačítko nechcete používat.
+     */
+    byte Button2;
+
+
     uint8_t motor_id_left; //!< Které M číslo motoru patří levému, podle čísla na desce. Výchozí: `2`
     uint8_t motor_id_right; //!< Které M číslo motoru patří pravému, podle čísla na desce. Výchozí: `1`
+
     uint8_t motor_max_power_pct; //!< Limit výkonu motoru v procentech od 0 do 100. Ovlivňuje všechny režimy motorů. Výchozí: `60`
     bool motor_polarity_switch_left; //!< Prohození polarity levého motoru. Výchozí: `false`
     bool motor_polarity_switch_right; //!< Prohození polarity pravého motoru. Výchozí: `true`
@@ -98,6 +196,13 @@ struct rkConfig {
     float stupid_servo_min; //!< Spodní hranice signálu pro hloupá serva, která se robvná -90 stupňům. Výchozí: `-1.65`
     float stupid_servo_max; //!< Horní hranice signálu pro hloupá serva, která se rovná 90 stupňům. Výchozí: `1.65`
 
+    int8_t pocet_chytrych_serv;
+
+    bool enable_wifi_log; //!< Povolení WiFi logování. Výchozí: `false` ---> Jestli se má na začátku inicializovat wifi, bez toho nepojedou wifi logy.
+    bool enable_wifi_control_wasd; //!< Povolení WiFi ovládání přes SWAD. Výchozí: `false` ---> Jestli se má na začátku inicializovat wifi, bez toho nepojedou wifi ovládání přes wasd.
+    bool enable_wifi_terminal; //!< Povolení WiFi terminálu. Výchozí: `false` ---> Jestli se má na začátku inicializovat wifi, bez toho nepojedou wifi terminál.
+    const char* wifi_ssid; //!< SSID WiFi sítě pro připojení. Výchozí: `nullptr`  ----> Jmeno wifi na kterou se ma robot pripojit
+    const char* wifi_password; //!< Heslo WiFi sítě pro připojení. Výchozí: `nullptr` ---> Heslo wifi na kterou se ma robot pripojit
 
     rkPinsConfig pins; //!< Konfigurace pinů pro periferie, viz rkPinsConfig
 };
@@ -352,8 +457,240 @@ void rkMotorsSetPositionById(uint8_t id, float positionMm = 0.f);
  * \param y Y hodnota z joysticku.
  */
 void rkMotorsJoystick(int32_t x, int32_t y);
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /**@}*/
+
+/******************************************************************************
+ * Komplexní funkce pro pohyb
+ *
+ * Toto jsou funkce které při správném nastavení v rkConfig() pojedou přesně a jsou
+ * zde tedy univerzální.
+ *
+ * Všechny funkce jsou blokující -> pokud si chcete udělat podobnou, ale dělat při
+ * do ní ještě jednu věc (měřit barvu, ...), tak není nic jednoduššího:
+ * vykopírujte si ji z _librk_motors.cpp a upravte podle toho co potřebujete.
+ *
+ * Všechny funkce mají výpisi printf(), nebo std::cout<< ------> nyní zakomentované 
+ * ----> pokud chcete upravovat/ vylepsovat / zjišťovat procto nejede ----> tak by jste to meli odkomentovat !!!!!!!
+
+ ******************************************************************************/
+
+/**
+ * \defgroup Komplexni_funkce_pro_pohyb Komplexní funkce pro pohyb
+ *
+ * @{
+ */
+
+
+/**
+ * \brief Vrátí maximální rychlost robota, to co potom zadate na motor_max_ticks_per_second.
+ * 
+ * Pozor mue chvily trvat a motory se budou tocit.
+ */
+int16_t max_rychlost();
+
+/**
+ * \brief Pohyb robota vpřed (pokud máte správně nastavený polarity switch) o zadanou vzdálenost v mm  a rychlost v %. (blokující)
+ * 
+ * Tato funkc hned nastavý rychlost motorů ---> robot s sebou může trochu trhnout na začátku pohybu. ---->  Použít raději forward_acc pro plynulý rozjezd.
+ * 
+ * Robot využívá P - regulátor.
+ * 
+ * Timeout si robot vypočítá podle rychlosti a vzdálenosti s rezervou.
+ */
+void forward(float mm, float speed);
+
+/**
+ * \brief Pohyb robota vzad (pokud máte správně nastavený polarity switch) o zadanou vzdálenost v mm a rychlost v %. (blokující)
+ * 
+ * Tato funkc hned nastavý rychlost motorů ---> robot s sebou může trochu trhnout na začátku pohybu. ---->  Použít raději backward_acc pro plynulý rozjezd.
+ * 
+ * Robot využívá P - regulátor.
+ * 
+ * Timeout si robot vypočítá podle rychlosti a vzdálenosti s rezervou.
+ */
+void backward(float mm, float speed);
+
+/**
+ * \brief Otočení se robota na místě proti směru hodinových ručiček.
+ * 
+ * Úhel od 0 do 360, a doporučujeme rychlost do 60%
+ * 
+ * Robot využívá P - regulátor.
+ * 
+ * Robot během pohybu zrychlujeazpomaluje
+ * 
+ * Timeout je nastavený na 10 sekund.
+ */
+void turn_on_spot_left(float angle, float speed);
+
+/**
+ * \brief Otočení se robota na místě po směru hodinových ručiček.
+ * 
+ * Úhel od 0 do 360, a doporučujeme rychlost do 60%
+ * 
+ * Robot využívá P - regulátor.
+ * 
+ * Robot během pohybu zrychluje a zpomaluje
+ * 
+ * Timeout je nastavený na 10 sekund.
+ */
+void turn_on_spot_right(float angle, float speed);
+
+/**
+ * \brief Robot jede rádius do prava.
+ * 
+ * radius == vzdálenost od stredu otáčení k vnitřnímu kolu
+ * 
+ * Úhel od 0 do 360, a doporučujeme rychlost do 60%
+ * 
+ * Robot využívá P - regulátor.
+ * 
+ * Robot během pohybu zrychluje a zpomaluje
+ * 
+ * Timeout je nastavený na 10 sekund.
+ */
+void radius_right(float radius, float angle, float speed);
+
+/**
+ * \brief Robot jede rádius do leva.
+ * 
+ * radius == vzdálenost od stredu otáčení k vnitřnímu kolu
+ * 
+ * Úhel od 0 do 360, a doporučujeme rychlost do 60%
+ * 
+ * Robot využívá P - regulátor.
+ * 
+ * Robot během pohybu zrychluje a zpomaluje
+ * 
+ * Timeout je nastavený na 10 sekund.
+ */
+void radius_left(float radius, float angle, float speed);
+
+/**
+ * \brief Pohyb robota vpřed se zrychkením a zpomalením (robot s sebou necukne)
+ * 
+ * Lze vyuzit i pro male vzdalenosti.
+ * 
+ * Robot využívá P - regulátor.
+ * 
+ * Timeout je vypočítaný stejně jako u forward jen vynásoben 2.
+ */
+void forward_acc(float mm, float speed);
+
+/**
+ * \brief Pohyb robota vzad se zrychkením a zpomalením (robot s sebou necukne)
+ * 
+ * Lze vyuzit i pro male vzdalenosti.
+ * 
+ * Robot využívá P - regulátor.
+ * 
+ * Timeout je vypočítaný stejně jako u forward jen vynásoben 2.
+ */
+void backward_acc(float mm, float speed);
+
+/**
+ * \brief Zjistí, zda je stisknuto vlastní fyzické tlačítko 1 (napojeno na pin z rkConfig.Button1)
+ * \param waitForRelease Přejete-li si po vyhodnocení stisku počkat na puštění tlačítka (výchozí: nepauznout - false)
+ * \return Vrátí `true` pokud je tlačítko stisknuto na hodnotě LOW.
+ */
+bool rkButton1(bool waitForRelease = false);
+
+/**
+ * \brief Zjistí, zda je stisknuto vlastní fyzické tlačítko 2 (napojeno na pin z rkConfig.Button2)
+ * \param waitForRelease Přejete-li si po vyhodnocení stisku počkat na puštění tlačítka (výchozí: nepauznout - false)
+ * \return Vrátí `true` pokud je tlačítko stisknuto na hodnotě LOW.
+ */
+bool rkButton2(bool waitForRelease = false);
+
+/**
+ * \brief Pohyb robota vzad, dokud obě zadané podmínky nevrátí true.
+ * Timeout je 10 sekund. Po stisku prvního se na druhé čeká 3 vteřiny.
+ * Udržuje rovný směr pomocí P-regulátoru a enkodérů.
+ * \param speed Rychlost (0-100), se kterou se bude couvat.
+ * \param first_button Funkce vyhodnocující první stranu (výchozí je konfigurace tlačítek 1)
+ * \param second_button Funkce vyhodnocující druhou stranu (výchozí je konfigurace tlačítek 2)
+ */
+void back_buttons(float speed, std::function<bool()> first_button = []{ return rkButton1(); }, std::function<bool()> second_button = []{ return rkButton2(); });
+
+/**
+ * \brief Pohyb robota vpřed, dokud obě zadané podmínky nevrátí true.
+ * Timeout je 10 sekund. Po stisku prvního se na druhé čeká 3 vteřiny.
+ * Udržuje rovný směr pomocí P-regulátoru a enkodérů.
+ * \param speed Rychlost (0-100) vpřed.
+ * \param first_button Funkce vyhodnocující první stranu (výchozí je konfigurace tlačítek 1)
+ * \param second_button Funkce vyhodnocující druhou stranu (výchozí je konfigurace tlačítek 2)
+ */
+void front_buttons(float speed, std::function<bool()> first_button = []{ return rkButton1(); }, std::function<bool()> second_button = []{ return rkButton2(); });
+
+/**
+ * \brief Pohyb robota vpřed, a jede podél zdi pomocí dvou senzorů vzdálenosti
+ * 
+ * Timeout je vypočítaný jako u forward;
+ * 
+ * Při pohybu jede robut s P - regulátorem.
+ * 
+ * Pokud je speed záporné ---> robit pojede do zadu. V takovem pripade je potreba zadat prvni senzor ten v zadu robota.
+ * 
+ * First senzor je ten, kterej je prvni ve smeru jizdy robota.
+ * 
+ * Nejspise je potreba donastavovat podle aktualniho robota.
+ * 
+ * okolik_je zadni dal ---> treba -23 pokud je bliz zdi
+ * 
+ * pokud je bool automatic_distance_of_wall tru tak se ignoruje distance of wall
+ */
+void wall_following(float distance_to_drive, float speed, bool automatic_distance_of_wall ,float distance_of_wall, bool is_wall_on_right,
+                   std::function<uint32_t()> first_sensor, 
+                   std::function<uint32_t()> second_sensor, int o_kolik_je_dal_zadni);
+
+
+/**
+ * \brief Srovnání robota podle zdi pomocí dvou senzorů vzdálenosti
+ * 
+ * Timeout je 5 000 ms == 5 sekund, pokud chcete zmenit tak v _librk_motors.cpp v teto funkci zmente int timeut_ms = 5000;
+ * 
+ * Důležité je jaký senzor je first ---> First je prvni ve predni casti robota , pokud je na boku. First je na prave strane, pokud je v zadu nebo ve predu robota.
+ * 
+ * Důležité je aby jste spravne nastavily button_or_right ---> pokud je zed od robota na prave stranenebo vzadu tak nastavte true, pokud je zed na leve strane nebo ve predu tak nastavte false
+ * 
+ * Pokud je robot vyrovnanej na zactku tak se nic nestane.
+ * 
+ * Volte spise nizsi rychlosti do 30 % --- 10% je defaultni hodnota
+ * 
+ * Funkce nezvládne větší úhly ---- > pokud kolem neni zadna jina stena pouzit orient_to_wall_any_price() !!!!
+ * 
+ * Funkce first_sensor a second_sensor vrací hodnoty v mm ze senzorů vzdálenosti --- ultrazvuky nebo laserový s.
+ * 
+ */
+void orient_to_wall(bool button_or_right, std::function<uint32_t()> first_sensor, 
+                   std::function<uint32_t()> second_sensor, int o_kolik_je_dal_zadni = 0, float speed = 10);
+
+/**
+ * \brief Srovnání robota podle nejbližší zdi pomocí dvou senzorů vzdálenosti
+ * 
+ * Timeout je 8 000 ms == 8 sekund, pokud chcete zmenit tak v _librk_motors.cpp v teto funkci zmente int timeut_ms = 8000;
+ * 
+ * Důležité je jaký senzor je first ---> First je prvni ve predni casti robota , pokud je na boku. First je na prave strane, pokud je v zadu nebo ve predu robota.
+ * 
+ * Důležité je aby jste spravne nastavily button_or_right ---> pokud je zed od robota na prave stranenebo vzadu tak nastavte true, pokud je zed na leve strane nebo ve predu tak nastavte false
+ * 
+ * Pokud je robot vyrovnanej na zactku tak se nic nestane.
+ * 
+ * Volte spise nizsi rychlosti do 30 % --- 10% je defaultni hodnota
+ * 
+ * Funkce udela to ze se robot otoci o 360 stupnu a zjisti, kde nejblize je zed a k ni se vyrovna
+ * 
+ * Funkce first_sensor a second_sensor vrací hodnoty v mm ze senzorů vzdálenosti --- ultrazvuky nebo laserový s.
+ */
+
+void orient_to_wall_any_price(bool button_or_right, std::function<uint32_t()> first_sensor, 
+                   std::function<uint32_t()> second_sensor, int o_kolik_je_dal_zadni = 0, float speed = 20);
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/**@}*/
+
 /**
  * \defgroup battery Baterie
  *
@@ -602,7 +939,7 @@ uint16_t rkIrRight();
 /**
  * \defgroup ultrasound Ultrazvuky
  *
- * Funkce pro meření vzálenosti pomocí ultrazvuků.
+ * Funkce pro meření vzálenosti pomocí ultrazvuků. V mm !!!
  * @{
  */
 
@@ -702,6 +1039,11 @@ bool rkColorSensorGetRGB(const char* name, float* r, float* g, float* b);
  *   - Jinak provede boot na výchozí adrese 0x29, zapíše do registru 0x8A new_address
  *     a provede druhý boot na new_address.
  *
+ * Defaultne je maximalni pocet senzoru 6
+ * Před inicializovanim senzoru nastavit xshut pin na low --- jak je v examplu
+ * Senzor defaultně měří do 1,2 m
+ * 
+ * 
  * @param name        Textový identifikátor senzoru pro ladicí výpisy.
  * @param bus         Referenční I2C sběrnice (Wire nebo Wire1) pro komunikaci.
  * @param lox         Reference na instanci Adafruit_VL53L0X pro daný senzor.
@@ -784,6 +1126,252 @@ void rkServosDisable(uint8_t id);
  */
 lx16a::SmartServoBus& rkSmartServoBus(uint8_t servo_count);
 
+/**
+ * \brief Smart Servo funkce
+ */
+
+/**
+ * \brief Inicializace smart serva
+ * 
+ * @param id ID serva (0–253)
+ * @param low Dolní limit úhlu v ° (výchozí 0)
+ * @param high Horní limit úhlu v ° (výchozí 240)
+ * @param max_diff_centideg Maximum difference between expected and actual servo angle before the AutoStop Triggers ---- for soft_move
+ * @param max_diff_readings How many times must the difference between expected and actual servo angle ---- for soft_move
+ */
+void rkSmartServoInit(int id, int low = 0, int high = 240, int16_t max_diff_centideg = 400, uint8_t  max_diff_readings = 3);
+
+/**
+ * \brief Rychlý pohyb serva bez regulace
+ * 
+ * @param bus Reference na SmartServoBus
+ * @param id ID serva (0–253)
+ * @param angle Cílový úhel v ° (0-240)
+ * @param speed Rychlost (výchozí 200)
+ */
+void rkSmartServoMove(int id, int angle, int speed = 200);
+
+/**
+ * \brief Plynulý pohyb serva s ochranou proti zaseknutí
+ * 
+ * @param bus Reference na SmartServoBus
+ * @param id ID serva (0–253)
+ * @param angle Cílový úhel v ° (0-240)
+ * @param speed Rychlost (výchozí 200)
+ */
+void rkSmartServoSoftMove(int id, int angle, int speed = 200);
+
+/**
+ * \brief Přečte aktuální pozici smart serva
+ * 
+ * @param bus Reference na SmartServoBus
+ * @param id ID serva 1 nebo 0
+ */
+byte rkSmartServosPosicion(int id);
+////////////////////////////////////////////////////////////////
+
+/**
+ * \brief Při inicializaci robota a pokud je zapnuté enable_wifi_log se do serial monitoru vypise ip adresa, na niž se posilaji výpisy , které napíšete do tehle funkce.
+ * 
+ * Můžete napsat třeba : ´printf_wifi(" Start forward - %.1f mm, %.1f%% speed", mm, speed)´
+ */
+void printf_wifi(const char* format, ...);
+
+/**
+ * \brief Při používání print_wifi musíte ve smyčce volat tuto funkci s nejakým delay(), pokud ne tak se nebudou posílát hodnoty ---> web se nebude refreshovat
+ * 
+ * Buď to tedy volat ve smyčce třeba v main, nebo vytvořit vlákno.
+ */
+void handleWebClients();
+
+
+//////////////////////////////////////////////////////
+
+/**
+ * \brief Po zavolání této funkce se dostanete do nekonečné smyčky ovládání robota přes WiFi, kterou lze ukončit klávesou P z ovladače
+ * 
+ * Robot vytvoří vlastní WiFi síť s následujícím nastavením:
+ * - SSID (jméno sítě): nastaveno v cfg.wifi_ssid (výchozí "robot123")
+ * - Heslo: nastaveno v cfg.wifi_password (výchozí "1234")
+ * - IP adresa robota: 192.168.4.1
+ * 
+ * Postup připojení:
+ * 1. Připojte se na WiFi síť vytvořenou robotem
+ * 2. Spusťte program "robot_controller_wasd" z RBCX-controller
+ * 3. V programu použijte IP adresu 192.168.4.1
+ * 
+ * Ovládání:
+ * - WASD nebo šipky pro pohyb robota ---- (sipka doprede --> 60% , otaceni po 20% ----> lze nastavit, viz dale)
+ * - P pro ukončení ovládání
+ * - Klávesy L,K,J,H,G,M,N,B pro spuštění vlastních funkcí
+ * 
+ * Pro úpravu vlastních funkcí (FUNC1-FUNC8) upravte soubor:
+ * lib/RB3204-RBCX-Robotka-library-master/src/wifi_control.cpp v metodě Wifi::handleWebClients()
+ */
+void wifi_control_wasd();
+
+///////////////////////////////
+
+/**
+ * \brief Po zavolání této funkce se dostanete do nekonecne smycky.
+ * 
+ * Funkce slouží k ovládání robota na dálku přes terminál ---> můžete zadat např. forward(1000, 50) a příkaz se vykonná
+ * 
+ * Robot vytvoří vlastní WiFi síť s následujícím nastavením:
+ * - SSID (jméno sítě): nastaveno v cfg.wifi_ssid (výchozí "robot123")
+ * - Heslo: nastaveno v cfg.wifi_password (výchozí "1234")
+ * - IP adresa robota: 192.168.4.1
+ * 
+ * Postup připojení:
+ * 1. Připojte se na WiFi síť vytvořenou robotem
+ * 2. Spusťte program "robot_controller_terminal" z RBCX-controller-----> tak jak to tam je nejspiš jen na linuxu
+ * 3. V programu použijte IP adresu 192.168.4.1
+ */
+void wifi_control_terminal();
+
+//////////////////////////////////////////////////////
+/**
+ * \brief Spustí serialový terminál pro příkazy
+ * 
+ * Tato funkce běží nekonečně a čeká na příkazy ze sériového portu.
+ * POZOR: Serial musí být inicializován v main.cpp (Serial.begin(115200))
+ * 
+ * Dostupné příkazy:
+ * 
+ * === POHYB ROBOTA ===
+ * - forward(mm, speed)           - pohyb vpřed o zadanou vzdálenost (mm) a rychlost (%)
+ * - forward_acc(mm, speed)       - pohyb vpřed s plynulým zrychlením a zpomalením
+ * - backward(mm, speed)          - pohyb vzad o zadanou vzdálenost (mm) a rychlost (%)
+ * - backward_acc(mm, speed)      - pohyb vzad s plynulým zrychlením a zpomalením
+ * - turn_on_spot_left(angle, speed) - otočení na místě doleva o úhel (stupně) a rychlost (%)
+ * - turn_on_spot_right(angle, speed) - otočení na místě doprava o úhel (stupně) a rychlost (%)
+ * - radius_left(radius, angle, speed) - zatáčka doleva s poloměrem (mm), úhlem (stupně) a rychlost (%)
+ * - radius_right(radius, angle, speed) - zatáčka doprava s poloměrem (mm), úhlem (stupně) a rychlost (%)
+ * - back_buttons(speed)          - couvání, dokud nenarazí oběma tlačítky na zeď
+ * - max_rychlost()               - změří maximální rychlost motorů (ticks za sekundu)
+ * - stop()                       - okamžité zastavení motorů
+ * - set_speed(left, right)       - nastaví rychlost motorů v % (-100 až 100)
+ * - set_power(left, right)       - nastaví výkon motorů v % (-100 až 100)
+ * 
+ * === SMART SERVA ===
+ * - servo_init(id, [low, high])  - inicializace smart serva s ID, volitelně limity úhlu (low, high)
+ * - servo_move(id, angle, [speed]) - rychlý pohyb serva na úhel (0-240°) s volitelnou rychlostí
+ * - servo_soft_move(id, angle, [speed]) - plynulý pohyb serva s ochranou proti zaseknutí
+ * - servo_position(id)           - přečte aktuální pozici smart serva
+ * 
+ * Pokud si chcete doplnit příkazy, upravte funkci processCommand v robotka.cpp
+ */
+void rkSerialTerminal();
+/////////////////////////////////////////////////////////////////
+/**
+ * \defgroup uart UART Komunikace
+ * 
+ * Funkce pro UART komunikaci s externími zařízeními.
+ * 
+ * V examplupro UART je code i pro samostatny esp32 který komunikuje s robotkou přes UART
+ * @{
+ */
+
+/**
+ * \brief Inicializace UART komunikace
+ * 
+ * V examplupro UART je code i pro samostatny esp32 který komunikuje s robotkou přes UART
+ * 
+ * @param baudRate Rychlost komunikace (default: 115200)
+ * @param rxPin RX pin (default: 16)
+ * @param txPin TX pin (default: 17)
+ * @return true pokud inicializace proběhla úspěšně
+ */
+bool rkUartInit(int baudRate = 115200, int rxPin = 16, int txPin = 17);
+
+/**
+ * \brief Přijetí UART zprávy (blokující)
+ * 
+ * @param msg Ukazatel na strukturu, kam se uloží přijatá data
+ * @param timeoutMs Timeout v milisekundách (default: 1000)
+ * @return true pokud byla zpráva úspěšně přijata
+ */
+bool rkUartReceive_blocking(void* msg, size_t msgSize, uint32_t timeoutMs = 1000);
+
+/**
+ * \brief Přijetí UART zprávy (neblokující)
+ * 
+ * @param msg Ukazatel na strukturu, kam se uloží přijatá data
+ * @return true pokud byla zpráva úspěšně přijata
+ */
+bool rkUartReceive(void* msg, size_t msgSize);
+
+/**
+ * \brief Odeslání UART zprávy
+ * 
+ * @param msg Ukazatel na strukturu s daty k odeslání
+ * @param msgSize Velikost struktury v bytech
+ */
+void rkUartSend(const void* msg, size_t msgSize);
+
+
+//////////////////////////////////////////////////////
 /**@}*/
 
-#endif // LIBRB_H
+/**
+ * \defgroup mpu Gyroskop a Akcelerometr (MPU6050)
+ * 
+ * Funkce pro práci s na desce napájeným gyroskopem a zjišťování náklonu / rotace robota.
+ * @{
+ */
+
+/**
+ * \brief Inicializuje gyroskop (MPU6050) a provede základní kalibraci.
+ * 
+ * Během inicializace robot nesmí být v pohybu, jinak se gyroskop zkalibruje špatně
+ * a úhel Z bude neustále ujíždět.
+ * 
+ * Pokud na desce fyzicky nemate gyroskop ---> budou se vypisovat 0.
+ */
+void rkMpuInit();
+
+/**
+ * \brief Vrátí aktuální úhel natočení robota (osa Z) ve stupních.
+ * \return Úhel ve stupních.
+ */
+float rkMpuGetAngleZ();
+
+/**
+ * \brief Vrátí aktuální úhel náklonu robota dopředu/dozadu (osa X) ve stupních.
+ * \return Úhel ve stupních.
+ */
+float rkMpuGetAngleX();
+
+/**
+ * \brief Vrátí aktuální úhel náklonu robota do stran (osa Y) ve stupních.
+ * \return Úhel ve stupních.
+ */
+float rkMpuGetAngleY();
+
+/**
+ * \brief Vynuluje aktuální úhel na ose Z.
+ * Ideální použít těsně před zatáčením, abyste se mohli otočit relativně z aktuální pozice.
+ */
+void rkMpuResetZ();
+
+/**
+ * \brief Vynuluje aktuální úhel na ose X.
+ * Pomocí této funkce se aktuální náklon robota dopředu/dozadu začne hlásit jako 0.
+ */
+void rkMpuResetX();
+
+/**
+ * \brief Vynuluje aktuální úhel na ose Y.
+ * Pomocí této funkce se aktuální náklon robota do stran začne hlásit jako 0.
+ */
+void rkMpuResetY();
+
+/**
+ * \brief Vynuluje úhly na všech osách (X, Y, Z) naráz.
+ */
+void rkMpuResetAll();
+
+/**@}*/
+
+#endif // _LIBRB_H
+

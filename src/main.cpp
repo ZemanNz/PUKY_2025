@@ -2,11 +2,7 @@
 #include "robotka.h"
 #include <Wire.h>
 #include <Adafruit_TCS34725.h>
-#include "smart_servo_command.h"
-#include "motor_commands.h"
 #include "esp_system.h" // pro esp_restart()
-
-using namespace lx16a; // aby nebylo třeba to psát všude
 Adafruit_TCS34725 tcs1 = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_50MS, TCS34725_GAIN_4X);
 float r1, g1, b1;
 Adafruit_TCS34725 tcs2 = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_50MS, TCS34725_GAIN_4X);
@@ -26,6 +22,10 @@ int stred_od_boku = 150;
 
 // Globální proměnná pro aktuální pozici
 Pozice aktualni_pozice = {350 , 350};
+
+volatile bool puck_handling = false;
+String color_log_history = "";
+int log_counter = 0;
 
 ///////////
 
@@ -76,30 +76,30 @@ bool davam_prednost_z_prava = false;
 bool detekce_soupere(){
   Serial.printf("U1: %d, U2: %d, U3: %d\n, U4: %d ", rkUltraMeasure(1), rkUltraMeasure(2), rkUltraMeasure(3), rkUltraMeasure(4));
     if(je_neco_vepredu(200)) {
-        setMotorsPower(-7000, -7000); // Zastaví motory
+        rkMotorsSetSpeed(-22, -22); // Zastaví motory
         rkBuzzerSet(true);
         delay(300);
         rkBuzzerSet(false);
         delay(900);
-        setMotorsPower(0, 0); // Zastaví motory
+        rkMotorsSetSpeed(0, 0); // Zastaví motory
         return true; // Detekován soupeř
     }
     if((rkUltraMeasure(3) < 200) && (rkUltraMeasure(3) > 1)&& (!davam_prednost_z_prava)) { // U3 je senzor vzadu
         davam_prednost_z_prava = true; // Dáváme přednost zprava
-        for(int i = 18000; i > 0; i=- 2000) {
-            setMotorsPower(i, i); // Zpomaluje motory
+        for(int i = 56; i > 0; i -= 6) {
+            rkMotorsSetSpeed(i, i); // Zpomaluje motory
             delay(10);
         }
-        setMotorsPower(0,0);
+        rkMotorsSetSpeed(0, 0);
         int start_time = millis();
         while (millis() - start_time < 5000) { // čeká 5 sekundy
             if(je_neco_vepredu(200)){
-              setMotorsPower(-7000, -7000); // Zastaví motory
+              rkMotorsSetSpeed(-22, -22); // Zastaví motory
               rkBuzzerSet(true);
               delay(300);
               rkBuzzerSet(false);
               delay(900);
-              setMotorsPower(0, 0); // Zastaví motory
+              rkMotorsSetSpeed(0, 0); // Zastaví motory
               return true; // Detekován soupeř
             }
         }
@@ -180,16 +180,13 @@ DetekceBarvy Kde_jsme() {
     return vysledek;
 }
 void puk_do_l_boxu(){
-  auto &bus = rkSmartServoBus(1);
-  s_s_move(bus, 0, 170, 180.0);
+  rkSmartServoSoftMove(0, 170, 180);
 }
 void puk_do_r_boxu(){
-  auto &bus = rkSmartServoBus(1);
-  s_s_move(bus, 0, 70, 180.0);
+  rkSmartServoSoftMove(0, 70, 180);
 }
 void zavreni_dvirek(){
-  auto &bus = rkSmartServoBus(1);
-  s_s_move(bus, 0, 125, 130.0); // nahoru
+  rkSmartServoSoftMove(0, 125, 130); // nahoru
   delay(200);
 }
 void otevreni_prepazky(){
@@ -212,18 +209,18 @@ void ChytejPukyTask(void *pvParameters) {
     while (true) {
         auto now = Detekce_puku();
         if (now.je_tam) {
-          zavreni_prepazky();
+            puck_handling = true;
+            zavreni_prepazky();
             if (now.barva == RED) {
               if( puck_in_l_box < max_puck_per_box) {
                 Serial.println("Detekován červený puk!");
                 puk_do_l_boxu();
-                setMotorsPower(0, 0); // zastaví motory
+                rkMotorsSetSpeed(0, 0); // zastaví motory
                 delay(300);
-                rkMotorsDrive(70, 70, 100, 100);
+                rkMotorsDrive(12, 12, 100, 100);
                 zavreni_dvirek();
                 delay(400);
                 otevreni_prepazky();
-                setMotorsPower(20000, 20000); // zastaví motory
                 puck_in_l_box++;
                 Serial.printf("Puky v levém boxu: %d\n", puck_in_l_box);
                 }
@@ -231,16 +228,16 @@ void ChytejPukyTask(void *pvParameters) {
                 if( puck_in_r_box < max_puck_per_box) {
                   Serial.println("Detekován modrý puk!");
                   puk_do_r_boxu();
-                  setMotorsPower(0, 0); // zastaví motory
+                  rkMotorsSetSpeed(0, 0); // zastaví motory
                   delay(300);
-                  rkMotorsDrive(70, 70, 100, 100);
+                  rkMotorsDrive(12, 12, 100, 100);
                   zavreni_dvirek();
                   delay(400);
                   otevreni_prepazky();
-                  setMotorsPower(20000, 20000); // zastaví motory
                   puck_in_r_box++;
                 }
             }
+            puck_handling = false;
         } else {
             Serial.println("Puk nenalezen.");
         }
@@ -248,106 +245,124 @@ void ChytejPukyTask(void *pvParameters) {
     }
     vTaskDelete(NULL); // kdyby někdy skončil
 }
-float M_wheel_circumference = 127.0f * PI; // Průměr kola v mm * PI
-int32_t MmToTicks(float mm){
-    return (mm / M_wheel_circumference) * 38.55937f * 48.f;
-}
-
-float TicksToMm(int32_t ticks) {
-    return float(ticks) / 38.55937f / 48.f * M_wheel_circumference;
-}
-
-int Odchylka = 0, Integral = 0, Last_odchylka = 0;
-void zkontroluj_pid(int power, int M1_pos, int M4_pos){
-        int Max_integral = 1000;
-        Odchylka = M1_pos - M4_pos;
-        Integral += Odchylka;
-        if (Integral >  Max_integral) Integral =  Max_integral;
-        if (Integral < -Max_integral) Integral = -Max_integral;
-        int rawPower = power + Odchylka * Kp + Integral * (Ki+2) + (Odchylka - Last_odchylka) * Kd;
-        // saturace
-        const int maxPower = 32000;
-        if      (rawPower >  maxPower) rawPower =  maxPower;
-        else if (rawPower < -maxPower) rawPower = -maxPower;
-        auto& man = rb::Manager::get();
-        Odchylka = M1_pos - M4_pos;
-        Integral += Odchylka;
-        man.motor(rb::MotorId::M1).power(-power * 0.9185f);//
-        man.motor(rb::MotorId::M4).power(rawPower);
-        Last_odchylka = Odchylka;
-}
 ///////////////////
-int M4_pos = 0;
-int M1_pos = 0;
-
 void jed_a_chytej_puky(int distance, bool x, bool kladna = true){
-  auto& man = rb::Manager::get(); // vytvoří referenci na man class
-  man.motor(rb::MotorId::M1).setCurrentPosition(0);
-  man.motor(rb::MotorId::M4).setCurrentPosition(0);
+  if (distance <= 0) return;
+  // Reset pozic enkodérů
+  rkMotorsSetPositionLeft(0);
+  rkMotorsSetPositionRight(0);
   otevreni_prepazky(); // Otevře prepážku
-  man.motor(rb::MotorId::M4).requestInfo([&](rb::Motor& info) {
-          M4_pos = info.position();
-      });
-  man.motor(rb::MotorId::M1).requestInfo([&](rb::Motor& info) {
-         M1_pos = -info.position();
-      });
 
+  puck_handling = false; // Reset to false just in case
   xTaskCreate(ChytejPukyTask, "ChytejPuky", 2048, NULL, 1, &chytejPukyHandle);
 
-  Serial.printf("musi_jet::: M1_pos: %d, M4_pos: %d\n", MmToTicks(distance), MmToTicks(distance));
-  setMotorsPower(20000, 20000); // Nastaví motory na 20000
+  Serial.printf("musi_jet::: distance: %d mm\n", distance);
 
-  while(M4_pos < MmToTicks(distance) && M1_pos < MmToTicks(distance)) {
-          man.motor(rb::MotorId::M4).requestInfo([&](rb::Motor& info) {
-              M4_pos = info.position();
-          });
-          man.motor(rb::MotorId::M1).requestInfo([&](rb::Motor& info) {
-             M1_pos = -info.position();
-          });
+  float pos_left = 0;
+  float pos_right = 0;
+  
+  // Acceleration/deceleration parameters
+  float const max_s = 15.0f; // maximum speed (slower than 20% by user request)
+  float const min_s = 8.0f;  // minimum speed (so it overcomes friction but starts slow)
+  float const ramp_dist = 120.0f; // distance in mm to ramp up/down
+  
+  float actual_ramp = ramp_dist;
+  if (distance < 2.0f * ramp_dist) {
+      actual_ramp = distance / 2.0f;
+  }
 
-          Serial.printf("[ENCODERY] M4_pos: %d\n", M4_pos);
+  while(pos_left < distance && pos_right < distance) {
+      pos_left = abs(rkMotorsGetPositionLeft(true));
+      pos_right = abs(rkMotorsGetPositionRight(true));
+      float ujeta_vzdalenost = (pos_left + pos_right) / 2.0f;
 
-          if(M1_pos > 200 && M4_pos > 200) {
-            zkontroluj_pid(20000, M1_pos, M4_pos);
+      if (!puck_handling) {
+          // 1) Ramp calculation (Acceleration & Deceleration)
+          float speed_base = max_s;
+          if (ujeta_vzdalenost < actual_ramp) {
+              // Ramp up
+              float progress = ujeta_vzdalenost / actual_ramp;
+              speed_base = min_s + (max_s - min_s) * progress;
+          } else if (distance - ujeta_vzdalenost < actual_ramp) {
+              // Ramp down
+              float progress = (distance - ujeta_vzdalenost) / actual_ramp;
+              speed_base = min_s + (max_s - min_s) * progress;
+          }
+          
+          if (speed_base < min_s) speed_base = min_s;
+          if (speed_base > max_s) speed_base = max_s;
+
+          // 2) Proportional control for straight-line driving (encoder sync using raw ticks, like back_buttons)
+          int left_ticks = abs(rkMotorsGetPositionLeft(false));
+          int right_ticks = abs(rkMotorsGetPositionRight(false));
+          int error = left_ticks - right_ticks;
+          
+          float m_kp = 0.23f; // Same proportional constant as back_buttons
+          float m_max_correction = 5.0f; // Same max correction as back_buttons
+          
+          float correction = error * m_kp;
+          if (correction > m_max_correction) correction = m_max_correction;
+          if (correction < -m_max_correction) correction = -m_max_correction;
+
+          float speed_left = speed_base;
+          float speed_right = speed_base;
+
+          if (error > 0) {
+              // Left is ahead - slow down left
+              speed_left -= correction;
+          } else if (error < 0) {
+              // Right is ahead - slow down right
+              speed_right += correction;
           }
 
-          if(detekce_soupere()) {
-           break;
-          }
-          delay(10);
-    }
-    man.motor(rb::MotorId::M4).requestInfo([&](rb::Motor& info) {
-              M4_pos = info.position();
-          });
-    man.motor(rb::MotorId::M1).requestInfo([&](rb::Motor& info) {
-             M1_pos = -info.position();
-          });
-    Serial.printf("[ENCODERY] M4_pos: %d, M1_pos: %d\n", M4_pos, M1_pos);
-    if(kladna){
-      if(x) {
-        aktualni_pozice.x = aktualni_pozice.x + TicksToMm(M1_pos); // Nastaví aktuální pozici na střed
+          // Apply bounds
+          if (speed_left < min_s) speed_left = min_s;
+          if (speed_left > max_s) speed_left = max_s;
+          if (speed_right < min_s) speed_right = min_s;
+          if (speed_right > max_s) speed_right = max_s;
+
+          rkMotorsSetSpeed(speed_left, speed_right);
       }
-      else{
-        aktualni_pozice.y = aktualni_pozice.y + TicksToMm(M1_pos); // Nastaví aktuální pozici na střed
+
+      Serial.printf("[ENCODERY] left: %.1f mm, right: %.1f mm (handling puck: %s)\n", 
+                    pos_left, pos_right, puck_handling ? "YES" : "NO");
+
+      if(detekce_soupere()) {
+          break;
       }
+      delay(10);
+  }
+
+  // Přečtení finální pozice
+  pos_left = abs(rkMotorsGetPositionLeft(true));
+  pos_right = abs(rkMotorsGetPositionRight(true));
+  float ujeta_vzdalenost = (pos_left + pos_right) / 2.0f;
+  Serial.printf("[ENCODERY] final left: %.1f, right: %.1f, avg: %.1f mm\n", pos_left, pos_right, ujeta_vzdalenost);
+  
+  if(kladna){
+    if(x) {
+      aktualni_pozice.x = aktualni_pozice.x + (int)ujeta_vzdalenost;
     }
     else{
-      if(x) {
-        aktualni_pozice.x = aktualni_pozice.x - TicksToMm(M1_pos); // Nastaví aktuální pozici na střed
-      }
-      else{
-        aktualni_pozice.y = aktualni_pozice.y - TicksToMm(M1_pos); // Nastaví aktuální pozici na střed
-      }
+      aktualni_pozice.y = aktualni_pozice.y + (int)ujeta_vzdalenost;
     }
-      vTaskDelete(chytejPukyHandle);
-      chytejPukyHandle = NULL; // Uvolníme task, pokud běžel
-      setMotorsPower(0, 0); // Zastaví motory
-      delay(100);
-      man.motor(rb::MotorId::M1).setCurrentPosition(0);
-      man.motor(rb::MotorId::M4).setCurrentPosition(0);
-      M1_pos = 0;
-      M4_pos = 0;
-      zavreni_dvirek();
+  }
+  else{
+    if(x) {
+      aktualni_pozice.x = aktualni_pozice.x - (int)ujeta_vzdalenost;
+    }
+    else{
+      aktualni_pozice.y = aktualni_pozice.y - (int)ujeta_vzdalenost;
+    }
+  }
+  
+  vTaskDelete(chytejPukyHandle);
+  chytejPukyHandle = NULL; // Uvolníme task, pokud běžel
+  rkMotorsSetSpeed(0, 0); // Zastaví motory
+  delay(100);
+  rkMotorsSetPositionLeft(0);
+  rkMotorsSetPositionRight(0);
+  zavreni_dvirek();
 }
 void dojed_na_svoje(bool modra){
   auto a = Kde_jsme(); // Zjistí, kde jsme
@@ -357,9 +372,9 @@ void dojed_na_svoje(bool modra){
     } else {
       Serial.println("Nejsem na modré barvě, hledaM MODROUA");
       while(true) { // dokud nejsme na modré barvě
-      turn_on_spot(-90); // otočí se o 90 stupňů
+      turn_on_spot_right(90, 10); // otočí se o 90 stupňů
       delay(1000);
-      back_buttons(80); // otočí se o 180 stupňů
+      back_buttons(15); // otočí se o 180 stupňů
       jed_a_chytej_puky(2800, true, false); // jede do středu
       a = Kde_jsme(); // Zjistí, kde jsme
       if(a.je_tam && a.barva == BLUE) {
@@ -367,13 +382,13 @@ void dojed_na_svoje(bool modra){
         rkBuzzerSet(true);
         delay(1000);
         rkBuzzerSet(false);
-        turn_on_spot(180); // otočí se o 90 stupňů
-        back_buttons(80); // otočí se o 180 stupňů
-        forward(80, 70); // Přejede do středu
-        turn_on_spot(90); // otočí se o 90 stupňů
-        back_buttons(80); // otočí se o 180 stupňů
-        forward(80, 70); // Přejede do středu
-        turn_on_spot(-90); // otočí se o 90 stupňů
+        turn_on_spot_left(180, 10); // otočí se o 90 stupňů
+        back_buttons(15); // otočí se o 180 stupňů
+        forward(80, 20); // Přejede do středu
+        turn_on_spot_left(90, 10); // otočí se o 90 stupňů
+        back_buttons(15); // otočí se o 180 stupňů
+        forward(80, 20); // Přejede do středu
+        turn_on_spot_right(90, 10); // otočí se o 90 stupňů
         aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
         aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
         delay(200);
@@ -390,9 +405,9 @@ void dojed_na_svoje(bool modra){
     } else {
       Serial.println("Nejsem na RED barvě, hledaM RED");
       while(true) { // dokud nejsme na modré barvě
-      turn_on_spot(-90); // otočí se o 90 stupňů
+      turn_on_spot_right(90, 10); // otočí se o 90 stupňů
       delay(1000);
-      back_buttons(80); // otočí se o 180 stupňů
+      back_buttons(15); // otočí se o 180 stupňů
       jed_a_chytej_puky(2800, true, false); // jede do středu
       a = Kde_jsme(); // Zjistí, kde jsme
       if(a.je_tam && a.barva == RED) {
@@ -400,13 +415,13 @@ void dojed_na_svoje(bool modra){
         rkBuzzerSet(true);
         delay(1000);
         rkBuzzerSet(false);
-        turn_on_spot(-182); // otočí se o 90 stupňů
-        back_buttons(80); // otočí se o 180 stupňů
-        forward(70, 70); // Přejede do středu
-        turn_on_spot(90); // otočí se o 90 stupňů
-        back_buttons(80); // otočí se o 180 stupňů
-        forward(70, 70); // Přejede do středu
-        turn_on_spot(-90); // otočí se o 90 stupňů
+        turn_on_spot_right(182, 10); // otočí se o 90 stupňů
+        back_buttons(15); // otočí se o 180 stupňů
+        forward(70, 20); // Přejede do středu
+        turn_on_spot_left(90, 10); // otočí se o 90 stupňů
+        back_buttons(15); // otočí se o 180 stupňů
+        forward(70, 20); // Přejede do středu
+        turn_on_spot_right(90, 10); // otočí se o 90 stupňů
         aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
         aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
         delay(200);
@@ -423,130 +438,130 @@ void dojed_na_svoje(bool modra){
 void modra(){
   Serial.println("Modra barva");
   jed_a_chytej_puky(2150 - aktualni_pozice.y, false);
-  turn_on_spot(90); // otočí se o 90 stupňů
-  back_buttons(80); // otočí se o 180 stupňů
+  turn_on_spot_left(90, 10); // otočí se o 90 stupňů
+  back_buttons(15); // otočí se o 180 stupňů
   aktualni_pozice.x =stred_od_zadu; // Nastaví aktuální pozici na střed
   // open_l_box(); // zakomentováno: levý box (červený) v modra()
   delay(100);
   jed_a_chytej_puky(2150 - aktualni_pozice.x, true);
   // close_l_box(); // Zavře levý box -- zakomentováno: levý box (červený) v modra()
-  turn_on_spot(90);
-  back_buttons(80);
+  turn_on_spot_left(90, 10);
+  back_buttons(15);
   aktualni_pozice.y = 2500- stred_od_zadu; // Nastaví aktuální pozici na střed
   jed_a_chytej_puky((aktualni_pozice.y- stred_od_predu- 200), false, false); // jede do levé krabice
-  turn_on_spot(90); // otočí se o 90 stupňů
+  turn_on_spot_left(90, 10); // otočí se o 90 stupňů
   // open_l_box(); // Otevře levý box --- cervene -- souperovi puky -- zakomentováno v modra()
   jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false); // jede do levé krabice
   // close_l_box(); // Zavře levý box -- zakomentováno v modra()
-  turn_on_spot(182); // otočí se o 90 stupňů
-  back_buttons(80); // otočí se o 180 stup
-  forward(70, 70); // Přejede do středu
-  turn_on_spot(-90); // otočí se o 90 stupňů
+  turn_on_spot_left(182, 10); // otočí se o 90 stupňů
+  back_buttons(15); // otočí se o 180 stup
+  forward(70, 20); // Přejede do středu
+  turn_on_spot_right(90, 10); // otočí se o 90 stupňů
   delay(1000);
-  back_buttons(80); // otočí se o 180 stupňů
-  forward(70, 70); // Přejede do středu
+  back_buttons(15); // otočí se o 180 stupňů
+  forward(70, 20); // Přejede do středu
   delay(200);
   aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
-  aktualni_pozice.y = 350; // Nastaví aktuální pozici na středauto 
+  aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
   dojed_na_svoje(true);
   open_r_box(); // Otevře pravý box --- modre -- svoje puky
-  forward(100, 60);
+  forward(100, 15);
   aktualni_pozice.y = 450; // Nastaví aktuální pozici na střed
   close_r_box(); // Zavře pravý box
   //////////////////////////////////////////////////
   //prvni kolo ujeto!!!
   ////////////////////////////////////////
   jed_a_chytej_puky(1850 -aktualni_pozice.y, false);
-  turn_on_spot(90); // otočí se o 90 stupňů
-  back_buttons(80); // otočí se o 180 stupňů
+  turn_on_spot_left(90, 10); // otočí se o 90 stupňů
+  back_buttons(15); // otočí se o 180 stupňů
   aktualni_pozice.x =stred_od_zadu; // Nastaví aktuální pozici na střed
   jed_a_chytej_puky(2050 - aktualni_pozice.x, true);
-  turn_on_spot(90);
+  turn_on_spot_left(90, 10);
   // open_l_box(); // Otevře levý box --- cervene -- souperovi puky -- zakomentováno v modra()
   jed_a_chytej_puky(600, false, false);
   // close_l_box(); // Zavře levý box -- zakomentováno v modra()
-  turn_on_spot(90); // otočí se o 90 stupňů
-  back_buttons(80); // otočí se o 180 stupňů
+  turn_on_spot_left(90, 10); // otočí se o 90 stupňů
+  back_buttons(15); // otočí se o 180 stupňů
   // open_l_box(); // Otevře pravý box --- modre -- svoje puky -- zakomentováno v modra()
   aktualni_pozice.x = 2500- stred_od_zadu; // Nastaví aktuální pozici na střed
   jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false); // jede do pravé krabice
-  turn_on_spot(180); // otočí se o 90 stupňů
+  turn_on_spot_left(180, 10); // otočí se o 90 stupňů
   // close_l_box(); // Zavře levý box -- zakomentováno v modra()
-  back_buttons(80); // otočí se o 180 stupňů
-  forward(70, 70); // Přejede do středu
-  turn_on_spot(-90); // otočí se o 90 stupňů
+  back_buttons(15); // otočí se o 180 stupňů
+  forward(70, 20); // Přejede do středu
+  turn_on_spot_right(90, 10); // otočí se o 90 stupňů
   delay(1000);
-  back_buttons(80); // otočí se o 180 stupňů
-  forward(70, 70); // Přejede do středu
+  back_buttons(15); // otočí se o 180 stupňů
+  forward(70, 20); // Přejede do středu
   aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
   aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
   dojed_na_svoje(true);
   open_r_box(); // Otevře pravý box --- modre -- svoje puky
-  forward(180, 60);
+  forward(180, 15);
   aktualni_pozice.y = 450; // Nastaví aktuální pozici na střed
   close_r_box(); // Zavře pravý box
   //////////////////////////////////////////////////////////
   // druhé kolo ujeto!!!
   ////////////////////////////////////////
   jed_a_chytej_puky(1500 -aktualni_pozice.y, false);
-  turn_on_spot(90); // otočí se o 90 stupňů
-  back_buttons(80); // otočí se o 180 stupňů
+  turn_on_spot_left(90, 10); // otočí se o 90 stupňů
+  back_buttons(15); // otočí se o 180 stupňů
   aktualni_pozice.x =stred_od_zadu; // Nastaví aktuální pozici na střed
   jed_a_chytej_puky(1500 - aktualni_pozice.x, true);
-  turn_on_spot(90);
+  turn_on_spot_left(90, 10);
   // open_l_box(); // Otevře levý box --- cervene -- souperovi puky -- zakomentováno v modra()
   jed_a_chytej_puky(600, false, false);
   // close_l_box(); // Zavře levý box -- zakomentováno v modra()
-  turn_on_spot(90); // otočí se o 90 stupňů
-  back_buttons(80); // otočí se o 180 stupňů
+  turn_on_spot_left(90, 10); // otočí se o 90 stupňů
+  back_buttons(15); // otočí se o 180 stupňů
   // open_l_box(); // Otevře pravý box --- modre -- svoje puky -- zakomentováno v modra()
   aktualni_pozice.x = 2500- stred_od_zadu; // Nastaví aktuální pozici na střed
   jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false); // jede do pravé krabice
-  turn_on_spot(180); // otočí se o 90 stupňů
+  turn_on_spot_left(180, 10); // otočí se o 90 stupňů
   // close_l_box(); // Zavře levý box -- zakomentováno v modra()
-  back_buttons(80); // otočí se o 180 stupňů
-  forward(70, 70); // Přejede do středu
-  turn_on_spot(-90); // otočí se o 90 stupňů
+  back_buttons(15); // otočí se o 180 stupňů
+  forward(70, 20); // Přejede do středu
+  turn_on_spot_right(90, 10); // otočí se o 90 stupňů
   delay(1000);
-  back_buttons(80); // otočí se o 180 stupňů
-  forward(70, 70); // Přejede do středu
+  back_buttons(15); // otočí se o 180 stupňů
+  forward(70, 20); // Přejede do středu
   aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
   aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
   dojed_na_svoje(true);
   open_r_box(); // Otevře pravý box --- modre -- svoje puky
-  forward(180, 60);
+  forward(180, 15);
   aktualni_pozice.y = 450; // Nastaví aktuální pozici na střed
   close_r_box(); // Zavře pravý box
 
 ////////treti kolo ujeto//////////////////////
 
 jed_a_chytej_puky(1000 -aktualni_pozice.y, false);
-  turn_on_spot(90); // otočí se o 90 stupňů
-  back_buttons(80); // otočí se o 180 stupňů
+  turn_on_spot_left(90, 10); // otočí se o 90 stupňů
+  back_buttons(15); // otočí se o 180 stupňů
   aktualni_pozice.x =stred_od_zadu; // Nastaví aktuální pozici na střed
   jed_a_chytej_puky(1000 - aktualni_pozice.x, true);
-  turn_on_spot(90);
+  turn_on_spot_left(90, 10);
   open_l_box(); // Otevře levý box --- cervene -- souperovi puky
   jed_a_chytej_puky(600, false, false);
   close_l_box(); // Zavře levý box
-  turn_on_spot(90); // otočí se o 90 stupňů
-  back_buttons(80); // otočí se o 180 stupňů
+  turn_on_spot_left(90, 10); // otočí se o 90 stupňů
+  back_buttons(15); // otočí se o 180 stupňů
   open_l_box(); // Otevře pravý box --- modre -- svoje puky
   aktualni_pozice.x = 2500- stred_od_zadu; // Nastaví aktuální pozici na střed
   jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false); // jede do pravé krabice
-  turn_on_spot(180); // otočí se o 90 stupňů
+  turn_on_spot_left(180, 10); // otočí se o 90 stupňů
   close_l_box(); // Zavře levý box
-  back_buttons(80); // otočí se o 180 stupňů
-  forward(70, 70); // Přejede do středu
-  turn_on_spot(-90); // otočí se o 90 stupňů
+  back_buttons(15); // otočí se o 180 stupňů
+  forward(70, 20); // Přejede do středu
+  turn_on_spot_right(90, 10); // otočí se o 90 stupňů
   delay(1000);
-  back_buttons(80); // otočí se o 180 stupňů
-  forward(70, 70); // Přejede do středu
+  back_buttons(15); // otočí se o 180 stupňů
+  forward(70, 20); // Přejede do středu
   aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
   aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
   dojed_na_svoje(true);
   open_r_box(); // Otevře pravý box --- modre -- svoje puky
-  forward(180, 60);
+  forward(180, 15);
   aktualni_pozice.y = 450; // Nastaví aktuální pozici na střed
   close_r_box(); // Zavře pravý box
 
@@ -571,99 +586,99 @@ jed_a_chytej_puky(1000 -aktualni_pozice.y, false);
 void cervena(){
   Serial.println("Cervena barva");
   jed_a_chytej_puky(2150 - aktualni_pozice.y, false);
-  turn_on_spot(90); // otočí se o 90 stupňů
-  back_buttons(80); // otočí se o 180 stupňů
+  turn_on_spot_left(90, 10); // otočí se o 90 stupňů
+  back_buttons(15); // otočí se o 180 stupňů
   // open_r_box(); // zakomentováno: pravý box (modrý) v cervena()
   aktualni_pozice.x =stred_od_zadu; // Nastaví aktuální pozici na střed
   delay(100);
   jed_a_chytej_puky(2150 - aktualni_pozice.x, true);
   // close_r_box(); // Zavře pravý box -- zakomentováno: pravý box (modrý) v cervena()
   
-  turn_on_spot(90);
-  back_buttons(80);
+  turn_on_spot_left(90, 10);
+  back_buttons(15);
   aktualni_pozice.y = 2500- stred_od_zadu; // Nastaví aktuální pozici na střed
   jed_a_chytej_puky((aktualni_pozice.y- stred_od_predu- 200), false, false); // jede do levé krabice
-  turn_on_spot(90); // otočí se o 90 stupňů
+  turn_on_spot_left(90, 10); // otočí se o 90 stupňů
   // open_r_box(); // Otevře pravý box --- cervene -- souperovi puky -- zakomentováno v cervena()
   jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false); // jede do levé krabice
   // close_r_box(); // Zavře pravý box -- zakomentováno v cervena()
-  turn_on_spot(182); // otočí se o 90 stupňů
-  back_buttons(80); // otočí se o 180 stup
-  forward(70, 70); // Přejede do středu
-  turn_on_spot(-90); // otočí se o 90 stupňů
+  turn_on_spot_left(182, 10); // otočí se o 90 stupňů
+  back_buttons(15); // otočí se o 180 stup
+  forward(70, 20); // Přejede do středu
+  turn_on_spot_right(90, 10); // otočí se o 90 stupňů
   delay(1000);
-  back_buttons(80); // otočí se o 180 stupňů
-  forward(70, 70); // Přejede do středu
+  back_buttons(15); // otočí se o 180 stupňů
+  forward(70, 20); // Přejede do středu
   delay(200);
   aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
   aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
   dojed_na_svoje(false);
   open_l_box(); // Otevře pravý box --- modre -- svoje puky
-  forward(100, 60);
+  forward(100, 15);
   aktualni_pozice.y = 450; // Nastaví aktuální pozici na střed
   close_l_box(); // Zavře pravý box
   //////////////////////////////////////////////////
   //prvni kolo ujeto!!!
   ////////////////////////////////////////
   jed_a_chytej_puky(1850 -aktualni_pozice.y, false);
-  turn_on_spot(90); // otočí se o 90 stupňů
-  back_buttons(80); // otočí se o 180 stupňů
+  turn_on_spot_left(90, 10); // otočí se o 90 stupňů
+  back_buttons(15); // otočí se o 180 stupňů
   aktualni_pozice.x =stred_od_zadu; // Nastaví aktuální pozici na střed
   jed_a_chytej_puky(2050 - aktualni_pozice.x, true);
-  turn_on_spot(90);
+  turn_on_spot_left(90, 10);
   open_r_box(); // Otevře levý box --- cervene -- souperovi puky
   jed_a_chytej_puky(600, false, false);
   close_r_box(); // Zavře levý box
-  turn_on_spot(90); // otočí se o 90 stupňů
-  back_buttons(80); // otočí se o 180 stupňů
+  turn_on_spot_left(90, 10); // otočí se o 90 stupňů
+  back_buttons(15); // otočí se o 180 stupňů
   // open_r_box(); // Otevře pravý box --- modre -- svoje puky -- zakomentováno v cervena()
   aktualni_pozice.x = 2500- stred_od_zadu; // Nastaví aktuální pozici na střed
   jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false); // jede do pravé krabice
-  turn_on_spot(180); // otočí se o 90 stupňů
+  turn_on_spot_left(180, 10); // otočí se o 90 stupňů
   // close_r_box(); // Zavře pravý box -- zakomentováno v cervena()
-  back_buttons(80); // otočí se o 180 stupňů
-  forward(70, 70); // Přejede do středu
-  turn_on_spot(-90); // otočí se o 90 stupňů
+  back_buttons(15); // otočí se o 180 stupňů
+  forward(70, 20); // Přejede do středu
+  turn_on_spot_right(90, 10); // otočí se o 90 stupňů
   delay(1000);
-  back_buttons(80); // otočí se o 180 stupňů
-  forward(70, 70); // Přejede do středu
+  back_buttons(15); // otočí se o 180 stupňů
+  forward(70, 20); // Přejede do středu
   aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
   aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
   dojed_na_svoje(false);
   open_l_box(); // Otevře pravý box --- modre -- svoje puky
-  forward(180, 60);
+  forward(180, 15);
   aktualni_pozice.y = 450; // Nastaví aktuální pozici na střed
   close_l_box(); // Zavře pravý box
   //////////////////////////////////////////////////////////
   // druhé kolo ujeto!!!
   ////////////////////////////////////////
   jed_a_chytej_puky(1500 -aktualni_pozice.y, false);
-  turn_on_spot(90); // otočí se o 90 stupňů
-  back_buttons(80); // otočí se o 180 stupňů
+  turn_on_spot_left(90, 10); // otočí se o 90 stupňů
+  back_buttons(15); // otočí se o 180 stupňů
   aktualni_pozice.x =stred_od_zadu; // Nastaví aktuální pozici na střed
   jed_a_chytej_puky(1500 - aktualni_pozice.x, true);
-  turn_on_spot(90);
+  turn_on_spot_left(90, 10);
   // open_r_box(); // Otevře pravý box --- cervene -- souperovi puky -- zakomentováno v cervena()
   jed_a_chytej_puky(600, false, false);
   // close_r_box(); // Zavře pravý box -- zakomentováno v cervena()
-  turn_on_spot(90); // otočí se o 90 stupňů
-  back_buttons(80); // otočí se o 180 stupňů
+  turn_on_spot_left(90, 10); // otočí se o 90 stupňů
+  back_buttons(15); // otočí se o 180 stupňů
   // open_r_box(); // Otevře pravý box --- modre -- svoje puky -- zakomentováno v cervena()
   aktualni_pozice.x = 2500- stred_od_zadu; // Nastaví aktuální pozici na střed
   jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false); // jede do pravé krabice
-  turn_on_spot(180); // otočí se o 90 stupňů
+  turn_on_spot_left(180, 10); // otočí se o 90 stupňů
   // close_r_box(); // Zavře pravý box -- zakomentováno v cervena()
-  back_buttons(80); // otočí se o 180 stupňů
-  forward(70, 70); // Přejede do středu
-  turn_on_spot(-90); // otočí se o 90 stupňů
+  back_buttons(15); // otočí se o 180 stupňů
+  forward(70, 20); // Přejede do středu
+  turn_on_spot_right(90, 10); // otočí se o 90 stupňů
   delay(1000);
-  back_buttons(80); // otočí se o 180 stupňů
-  forward(70, 70); // Přejede do středu
+  back_buttons(15); // otočí se o 180 stupňů
+  forward(70, 20); // Přejede do středu
   aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
   aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
   dojed_na_svoje(false);
   open_l_box(); // Otevře pravý box --- modre -- svoje puky
-  forward(180, 60);
+  forward(180, 15);
   aktualni_pozice.y = 450; // Nastaví aktuální pozici na střed
   close_l_box(); // Zavře pravý box
 
@@ -672,32 +687,32 @@ void cervena(){
   ////////////////////////////////////////
 
     jed_a_chytej_puky(1000 -aktualni_pozice.y, false);
-  turn_on_spot(90); // otočí se o 90 stupňů
-  back_buttons(80); // otočí se o 180 stupňů
+  turn_on_spot_left(90, 10); // otočí se o 90 stupňů
+  back_buttons(15); // otočí se o 180 stupňů
   aktualni_pozice.x =stred_od_zadu; // Nastaví aktuální pozici na střed
   jed_a_chytej_puky(1000 - aktualni_pozice.x, true);
-  turn_on_spot(90);
+  turn_on_spot_left(90, 10);
   // open_r_box(); // Otevře pravý box --- cervene -- souperovi puky -- zakomentováno v cervena()
   jed_a_chytej_puky(600, false, false);
   // close_r_box(); // Zavře pravý box -- zakomentováno v cervena()
-  turn_on_spot(90); // otočí se o 90 stupňů
-  back_buttons(80); // otočí se o 180 stupňů
+  turn_on_spot_left(90, 10); // otočí se o 90 stupňů
+  back_buttons(15); // otočí se o 180 stupňů
   // open_r_box(); // Otevře pravý box --- modre -- svoje puky -- zakomentováno v cervena()
   aktualni_pozice.x = 2500- stred_od_zadu; // Nastaví aktuální pozici na střed
   jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false); // jede do pravé krabice
-  turn_on_spot(180); // otočí se o 90 stupňů
+  turn_on_spot_left(180, 10); // otočí se o 90 stupňů
   // close_r_box(); // Zavře pravý box -- zakomentováno v cervena()
-  back_buttons(80); // otočí se o 180 stupňů
-  forward(70, 70); // Přejede do středu
-  turn_on_spot(-90); // otočí se o 90 stupňů
+  back_buttons(15); // otočí se o 180 stupňů
+  forward(70, 20); // Přejede do středu
+  turn_on_spot_right(90, 10); // otočí se o 90 stupňů
   delay(1000);
-  back_buttons(80); // otočí se o 180 stupňů
-  forward(70, 70); // Přejede do středu
+  back_buttons(15); // otočí se o 180 stupňů
+  forward(70, 20); // Přejede do středu
   aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
   aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
   dojed_na_svoje(false);
   open_l_box(); // Otevře pravý box --- modre -- svoje puky
-  forward(180, 60);
+  forward(180, 15);
   aktualni_pozice.y = 450; // Nastaví aktuální pozici na střed
   close_l_box(); // Zavře pravý box
 
@@ -716,15 +731,53 @@ void cervena(){
 void setup() {
   Serial.begin(115200);
     rkConfig cfg;
+    
+    // Kompletní nastavení rkConfig přenesené z knihovny
+    cfg.prevod_motoru = 919.889f; // Nastaveno na 1900 podle požadavku
+    
+    // Nastavení motorů
+    cfg.motor_id_left = 4;
+    cfg.motor_id_right = 1;
+    cfg.motor_polarity_switch_left = true;
+    cfg.motor_polarity_switch_right = false;
+    cfg.motor_enable_failsafe = false;
+    cfg.motor_max_ticks_per_second = 5200;
+    cfg.motor_max_acceleration = 50000;
+    cfg.motor_max_power_pct = 100;
+
+    // Nastavení kol a rozteče
+    cfg.left_wheel_diameter = 128.0;
+    cfg.right_wheel_diameter = 128.0;
+    cfg.motor_wheel_diameter = 128;
+    cfg.roztec_kol = 267.0;
+
+    // Korekční koeficienty
+    cfg.konstanta_radius_vnejsi_kolo = 0.96f;
+    cfg.konstanta_radius_vnitrni_kolo = 0.96f;
+    cfg.korekce_nedotacivosti_left = 0.97f;
+    cfg.korekce_nedotacivosti_right = 0.97f;
+
+    // Nastavení tlačítek
+    cfg.Button1 = 34;
+    cfg.Button2 = 35;
+
+    // Serva a WiFi
+    cfg.stupid_servo_min = -1.65f;
+    cfg.stupid_servo_max = 1.65f;
+    cfg.pocet_chytrych_serv = 1;
+    cfg.enable_wifi_log = false;
+    cfg.enable_wifi_control_wasd = false;
+    cfg.enable_wifi_terminal = false;
+    cfg.wifi_ssid = "robot1234";
+    cfg.wifi_password = "1234robot";
+
     rkSetup(cfg);
 
     printf("Robotka started!\n");
-    pinMode(Bbutton1, INPUT_PULLUP);
-    pinMode(Bbutton2, INPUT_PULLUP);
-    // Pripoj jedni chytre servo s id 0
-    //auto &bus = rkSmartServoBus(1);
-    auto &bus = rkSmartServoBus(1);
-    s_s_init(bus, 0, 0, 240);
+    pinMode(34, INPUT_PULLUP);
+    pinMode(35, INPUT_PULLUP);
+    // Inicializace chytrého serva
+    rkSmartServoInit(0, 0, 240);
     rkLedRed(true); // Turn on red LED
     rkLedBlue(true); // Turn on blue LED
     pinMode(21, PULLUP);
@@ -745,7 +798,6 @@ void setup() {
 }//230- dole 0 -nahore
 
 void loop() {
-  auto &bus = rkSmartServoBus(1);
   if(rkButtonIsPressed(BTN_LEFT)) {
     zavreni_dvirek();
     close_l_box();
@@ -763,62 +815,93 @@ void loop() {
     cervena();
   }
   else if(rkButtonIsPressed(BTN_ON)){
-    back_buttons(80); // otočí se o 180 stupňů
-    forward(70, 70); // Přejede do středu
-    turn_on_spot(90); // otočí se o 90 stupňů
-    back_buttons(80); // otočí se o 180 stupňů
-    forward(70, 70); // Přejede do středu
-    aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
-    aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
-    jed_a_chytej_puky(2100 -aktualni_pozice.x - stred_od_predu, true); // jede do levé krabice
-    open_r_box(); // Otevře levý box --- cervene -- souperovi puky
+    // === TEST POHYBU ===
+    Serial.println("=== TEST POHYBU START ===");
+
+    // 1) Rovně 1 metr
+    Serial.println("1) Forward 1000 mm...");
+    forward_acc(1500, 10);
+    delay(5000);
+
+    // 2) Otočení o 90° doprava
+    Serial.println("2) Turn right 90°...");
+    turn_on_spot_right(90, 8);
+    delay(5000);
+
+    // 3) Otočení o 180° doleva
+    Serial.println("3) Turn left 180°...");
+    turn_on_spot_left(180, 8);
+    delay(5000);
+
+    // 4) Back buttons - couvání ke zdi
+    Serial.println("4) Back buttons...");
+    back_buttons(8);
+
+    Serial.println("=== TEST POHYBU KONEC ===");
+    rkBuzzerSet(true);
     delay(300);
-    turn_on_spot(-90); // otočí se o 90 stupňů
-    delay(1000);
-    back_buttons(80); // otočí se o 180 stupňů
-    aktualni_pozice.x =stred_od_zadu; // Nastaví aktuální pozici na střed
-    jed_a_chytej_puky(800 - aktualni_pozice.y, true);
-    turn_on_spot(-90); // otočí se o 90 stupňů
-    delay(1000);
-    close_r_box(); // Zavře levý box
-    back_buttons(80); // otočí se o 180 stupňů
-    aktualni_pozice.x =2500 - stred_od_zadu; // Nastaví aktuální pozici na střed
-    open_r_box(); // Otevře pravý box --- modre -- svoje puky
-    jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu- 200, false);
-    close_r_box(); 
-    turn_on_spot(180);
-    delay(1000);
-    back_buttons(80); // otočí se o 180 stupňů
-    forward(70, 70); // Přejede do středu
-    turn_on_spot(-90); // otočí se o 90 stupňů
-    delay(1000);
-    back_buttons(80); // otočí se o 180 stupňů
-    forward(70, 70); // Přejede do středu
-    open_l_box(); // Otevře levý box --- cervene -- souperovi puky
-    forward(180, 60);
-    close_l_box(); // Zavře levý box
-    aktualni_pozice.y = 450; // Nastaví aktuální pozici na středů
+    rkBuzzerSet(false);
   }
   if(rkButtonIsPressed(BTN_UP)){
-    dojed_na_svoje(true);
+    // Precteni barevnych hodnot
+    rkColorSensorGetRGB("puky", &r1, &g1, &b1);
+    rkColorSensorGetRGB("zem", &r2, &g2, &b2);
+    
+    log_counter++;
+    char log_entry[150];
+    snprintf(log_entry, sizeof(log_entry), 
+             "Mereni #%d -> Barevny na puky: R=%.3f G=%.3f B=%.3f | Barevny na zem: R=%.3f G=%.3f B=%.3f\n",
+             log_counter, r1, g1, b1, r2, g2, b2);
+    
+    color_log_history += log_entry;
+    
+    // Okamzity vypis pro zpetnou vazbu
+    Serial.print(log_entry);
+    
+    // Pipnuti pro indikaci ulozeni
+    rkBuzzerSet(true);
+    delay(100);
+    rkBuzzerSet(false);
+
+    // Pockame na uvolneni tlacitka
+    while(rkButtonIsPressed(BTN_UP)) {
+      delay(20);
+    }
   }
-  if (rkButtonIsPressed(BTN_OFF)) {//dolu;
-     while(true){
-      auto a = Kde_jsme();
-      delay(500);
-     }
- }
+  if (rkButtonIsPressed(BTN_OFF)) {
+    Serial.println("\n=== VYPIS HISTORIE BAREVNYCH SENZORU ===");
+    if (color_log_history.length() == 0) {
+      Serial.println("Zadne logy nebyly ulozeny.");
+    } else {
+      Serial.print(color_log_history);
+    }
+    Serial.println("========================================\n");
+    
+    // Dvojite pipnuti pro indikaci vypsani
+    rkBuzzerSet(true);
+    delay(80);
+    rkBuzzerSet(false);
+    delay(80);
+    rkBuzzerSet(true);
+    delay(80);
+    rkBuzzerSet(false);
+
+    // Pockame na uvolneni tlacitka
+    while(rkButtonIsPressed(BTN_OFF)) {
+      delay(20);
+    }
+  }
  else if(rkButtonIsPressed(BTN_DOWN)) {
     Serial.println("Zahajuji TEST VSECH KOMPONENT...");
     // 1. Pohyb vpřed
-    setMotorsPower(15000, 15000);
+    rkMotorsSetSpeed(22, 22);
     delay(1000); // Jede 1 sekundu vpřed
-    setMotorsPower(0, 0);
+    rkMotorsSetSpeed(0, 0);
     Serial.println("Test: Pohyb vpřed OK");
 
     // 2. Použití zadních tlačítek (simulace funkce back_buttons)
     Serial.println("Test: Zadní tlačítka (back_buttons)");
-    back_buttons(50); // Otočí se o 180 stupňů (nebo jiná testovací akce)
+    back_buttons(25); // Otočí se o 180 stupňů (nebo jiná testovací akce)
 
     // 3. Pohyb servy
     Serial.println("Test: Serva");
@@ -833,12 +916,11 @@ void loop() {
 
         // 4. Pohyb chytrého serva (smart servo)
     Serial.println("Test: Chytré servo");
-    auto &bus = rkSmartServoBus(1);
-    s_s_move(bus, 0, 90, 100.0); // Nastaví servo na 90°
+    rkSmartServoSoftMove(0, 90, 100); // Nastaví servo na 90°
     delay(700);
-    s_s_move(bus, 0, 150, 100.0); // Nastaví servo na 150°
+    rkSmartServoSoftMove(0, 150, 100); // Nastaví servo na 150°
     delay(700);
-    s_s_move(bus, 0, 120, 100.0); // Vrátí zpět na 120°
+    rkSmartServoSoftMove(0, 120, 100); // Vrátí zpět na 120°
     delay(700);
 
     // 4. Test ultrazvukových senzorů

@@ -165,6 +165,7 @@ void forward(float mm, float speed) {
                 M4_pos = info.position();
             });
             man.motor(rb::MotorId::M1).requestInfo([&](rb::Motor& info) {
+                
                 M1_pos = -info.position();
             });
             // Serial.printf("[DOROVNÁNÍ] M1_pos: %d | M4_pos: %d | odchylka: %d\n", M1_pos, M4_pos, M1_pos - M4_pos);
