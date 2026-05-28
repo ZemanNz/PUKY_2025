@@ -124,28 +124,44 @@ struct DetekceBarvy {
 // Funkce pro detekci barvy ze senzoru
 DetekceBarvy Detekce_puku() {
     DetekceBarvy vysledek;
+    vysledek.je_tam = false;
+
+    // Precetni puky senzoru
     rkColorSensorGetRGB("puky", &r1, &g1, &b1);
     delay(20);
     rkColorSensorGetRGB("puky", &r1, &g1, &b1);
     delay(20);
     rkColorSensorGetRGB("puky", &r1, &g1, &b1);
     delay(20);
-    if (rkColorSensorGetRGB("puky", &r1, &g1, &b1)) {
-         Serial.print("R: "); Serial.print(r1, 3);
-         Serial.print(" G: "); Serial.print(g1, 3);
-         Serial.print(" B: "); Serial.println(b1, 3);
-        if ((r1 -38) > b1 && (r1-38) > g1) {
+
+    // Precetni zem senzoru
+    rkColorSensorGetRGB("zem", &r2, &g2, &b2);
+    delay(20);
+    rkColorSensorGetRGB("zem", &r2, &g2, &b2);
+    delay(20);
+    rkColorSensorGetRGB("zem", &r2, &g2, &b2);
+    delay(20);
+
+    if (rkColorSensorGetRGB("puky", &r1, &g1, &b1) && rkColorSensorGetRGB("zem", &r2, &g2, &b2)) {
+        Serial.print("PUKY R: "); Serial.print(r1, 3);
+        Serial.print(" G: "); Serial.print(g1, 3);
+        Serial.print(" B: "); Serial.print(b1, 3);
+        Serial.print(" | ZEM R: "); Serial.print(r2, 3);
+        Serial.print(" G: "); Serial.print(g2, 3);
+        Serial.print(" B: "); Serial.println(b2, 3);
+
+        bool is_ground_red = (r2 > 130.0f) && ((r2 - g2) > 40.0f);
+        bool is_ground_blue = (b2 > 80.0f) && ((b2 - r2) > 10.0f);
+
+        if ((r1 > 120.0f) && ((r1 - g1) > 50.0f) && ((r1 - b1) > 50.0f) && !is_ground_red) {
             vysledek.barva = RED;
             vysledek.je_tam = true;
-        } else if ((b1 > 90)&& (b1 -18) > r1 && (b1-18) > g1) {
+            Serial.println(">> NALEZEN CERVENY PUK");
+        } else if ((b1 > 120.0f) && ((b1 - r1) > 80.0f) && ((b1 - g1) > 40.0f) && !is_ground_blue) {
             vysledek.barva = BLUE;
             vysledek.je_tam = true;
+            Serial.println(">> NALEZEN MODRY PUK");
         }
-        else{
-          vysledek.je_tam = false;
-        }
-    } else {
-      vysledek.je_tam = false;
     }
     return vysledek;
 }
@@ -180,10 +196,10 @@ DetekceBarvy Kde_jsme() {
     return vysledek;
 }
 void puk_do_l_boxu(){
-  rkSmartServoSoftMove(0, 170, 180);
+  rkSmartServoSoftMove(0, 45, 180);
 }
 void puk_do_r_boxu(){
-  rkSmartServoSoftMove(0, 70, 180);
+  rkSmartServoSoftMove(0, 205, 180);
 }
 void zavreni_dvirek(){
   rkSmartServoSoftMove(0, 125, 130); // nahoru
@@ -217,7 +233,7 @@ void ChytejPukyTask(void *pvParameters) {
                 puk_do_l_boxu();
                 rkMotorsSetSpeed(0, 0); // zastaví motory
                 delay(300);
-                rkMotorsDrive(12, 12, 100, 100);
+                rkMotorsDrive(100, 100, 15, 15);
                 zavreni_dvirek();
                 delay(400);
                 otevreni_prepazky();
@@ -230,7 +246,7 @@ void ChytejPukyTask(void *pvParameters) {
                   puk_do_r_boxu();
                   rkMotorsSetSpeed(0, 0); // zastaví motory
                   delay(300);
-                  rkMotorsDrive(12, 12, 100, 100);
+                  rkMotorsDrive(100, 100, 15, 15);
                   zavreni_dvirek();
                   delay(400);
                   otevreni_prepazky();
