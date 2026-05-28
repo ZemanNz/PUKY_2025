@@ -380,6 +380,28 @@ void jed_a_chytej_puky(int distance, bool x, bool kladna = true){
   rkMotorsSetPositionRight(0);
   zavreni_dvirek();
 }
+
+void smart_align_wall(bool axis_x, int wall_coord, int target_reset_val, float speed) {
+    int current_val = axis_x ? aktualni_pozice.x : aktualni_pozice.y;
+    int dist = abs(current_val - wall_coord);
+    
+    Serial.printf("[SmartAlign] Kontrola steny: osa=%s, souradnice=%d, aktualni pozice=%d, odhad. vzdalenost=%d mm\n",
+                  axis_x ? "X" : "Y", wall_coord, current_val, dist);
+                  
+    if (dist <= 600) {
+        Serial.printf("[SmartAlign] Stena je blizko (%d mm <= 600 mm) -> couvam o stenu rychlosti %.1f\n", dist, speed);
+        back_buttons(speed);
+        if (axis_x) {
+            aktualni_pozice.x = target_reset_val;
+        } else {
+            aktualni_pozice.y = target_reset_val;
+        }
+        Serial.printf("[SmartAlign] Kalibrovano. Nova pozice %s = %d\n", axis_x ? "X" : "Y", target_reset_val);
+    } else {
+        Serial.printf("[SmartAlign] Stena je MOC DALEKO (%d mm > 600 mm) -> preskakuji couvani a kalibraci.\n", dist);
+    }
+}
+
 void dojed_na_svoje(bool modra){
   auto a = Kde_jsme(); // Zjistí, kde jsme
   if(modra){
@@ -451,139 +473,262 @@ void dojed_na_svoje(bool modra){
 }
 
 
+void smart_align_y(int current_y) {
+    Serial.printf("[SmartAlign] Spusteno. Vstupni Y: %d mm\n", current_y);
+    // Vždy popojedeme dopředu o 70 mm z boční stěny (z původního kódu "forward(70, 20)")
+    forward(70, 20);
+    delay(200);
+    
+    if (current_y > 600) {
+        Serial.printf("[SmartAlign] Vzdalenost %d mm > 600 mm -> otocim a jedu k domovu popredu.\n", current_y);
+        // Původně jedeme na západ. Otočením o 90° doleva budeme koukat na jih (k domovu).
+        turn_on_spot_left(90, 10);
+        delay(500);
+        
+        // Jdeme dopředu k domovu (Y = 70)
+        int drive_dist = current_y - 70;
+        forward(drive_dist, 30);
+        delay(200);
+        
+        // Otočíse o 180°, abychom koukali na sever (+Y) jako v klasickém zarovnání
+        turn_on_spot_right(180, 10);
+        delay(500);
+    } else {
+        Serial.println("[SmartAlign] Blizko steny -> klasicke zarovnani o zed.");
+        turn_on_spot_right(90, 10);
+        delay(1000);
+        back_buttons(15);
+        forward(70, 20);
+        delay(200);
+    }
+    Serial.println("[SmartAlign] Dokonceno.");
+}
+
+
+
 void modra(){
-  Serial.println("Modra barva");
+  Serial.println("\n=== [STRATEGIE] SPUSTENA MODRA ===\n");
+  
+  // ==================== KOLO 1 ====================
+  Serial.printf("\n--- [KOLO 1] START --- Pozice: X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
+  
+  Serial.printf("[Kolo 1] Jizda na sever: jed_a_chytej_puky(%d, Y-osa)\n", 2150 - aktualni_pozice.y);
   jed_a_chytej_puky(2150 - aktualni_pozice.y, false);
-  turn_on_spot_left(90, 10); // otočí se o 90 stupňů
-  back_buttons(15); // otočí se o 180 stupňů
-  aktualni_pozice.x =stred_od_zadu; // Nastaví aktuální pozici na střed
-  // open_l_box(); // zakomentováno: levý box (červený) v modra()
+  
+  Serial.println("[Kolo 1] Otoceni 90° doleva na zapad...");
+  turn_on_spot_left(90, 10);
+  
+  Serial.println("[Kolo 1] Zarovnani o pravou (Vychodni) stenu (X=0)...");
+  smart_align_wall(true, 0, stred_od_zadu, 15);
   delay(100);
+  
+  Serial.printf("[Kolo 1] Jizda na zapad k levym krabicim: jed_a_chytej_puky(%d, X-osa)\n", 2150 - aktualni_pozice.x);
   jed_a_chytej_puky(2150 - aktualni_pozice.x, true);
-  // close_l_box(); // Zavře levý box -- zakomentováno: levý box (červený) v modra()
+  
+  Serial.println("[Kolo 1] Preskakuji couvani k souperove stene Y=2500.");
+  turn_on_spot_left(90, 10); // pouze se otocime na jih
+  
+  Serial.printf("[Kolo 1] Jizda na jih podel levych krabic: jed_a_chytej_puky(%d, Y-osa, zpet)\n", aktualni_pozice.y - stred_od_predu - 200);
+  jed_a_chytej_puky((aktualni_pozice.y - stred_od_predu - 200), false, false);
+  
+  Serial.println("[Kolo 1] Otoceni 90° doleva na vychod...");
   turn_on_spot_left(90, 10);
-  back_buttons(15);
-  aktualni_pozice.y = 2500- stred_od_zadu; // Nastaví aktuální pozici na střed
-  jed_a_chytej_puky((aktualni_pozice.y- stred_od_predu- 200), false, false); // jede do levé krabice
-  turn_on_spot_left(90, 10); // otočí se o 90 stupňů
-  // open_l_box(); // Otevře levý box --- cervene -- souperovi puky -- zakomentováno v modra()
-  jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false); // jede do levé krabice
-  // close_l_box(); // Zavře levý box -- zakomentováno v modra()
-  turn_on_spot_left(182, 10); // otočí se o 90 stupňů
-  back_buttons(15); // otočí se o 180 stup
-  forward(70, 20); // Přejede do středu
-  turn_on_spot_right(90, 10); // otočí se o 90 stupňů
-  delay(1000);
-  back_buttons(15); // otočí se o 180 stupňů
-  forward(70, 20); // Přejede do středu
+  
+  Serial.printf("[Kolo 1] Jizda na vychod k leve krabici: jed_a_chytej_puky(%d, X-osa, zpet)\n", aktualni_pozice.x - stred_od_predu - 200);
+  jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false);
+  
+  Serial.println("[Kolo 1] Otoceni 182° na zapad...");
+  turn_on_spot_left(182, 10);
+  
+  Serial.println("[Kolo 1] Zarovnani o stenu...");
+  smart_align_wall(true, 0, stred_od_zadu, 15);
+  
+  Serial.println("[Kolo 1] Spoustim smart_align_y...");
+  smart_align_y(aktualni_pozice.y);
   delay(200);
-  aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
-  aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
+  
+  aktualni_pozice.x = 350;
+  aktualni_pozice.y = 350;
+  Serial.printf("[Kolo 1] Reset pred dojezdem: X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
+  
+  Serial.println("[Kolo 1] Spoustim dojed_na_svoje...");
   dojed_na_svoje(true);
-  open_r_box(); // Otevře pravý box --- modre -- svoje puky
+  
+  Serial.println("[Kolo 1] Vykladani nasich puku (pravy box)...");
+  open_r_box();
   forward(100, 15);
-  aktualni_pozice.y = 450; // Nastaví aktuální pozici na střed
-  close_r_box(); // Zavře pravý box
-  //////////////////////////////////////////////////
-  //prvni kolo ujeto!!!
-  ////////////////////////////////////////
-  jed_a_chytej_puky(1850 -aktualni_pozice.y, false);
-  turn_on_spot_left(90, 10); // otočí se o 90 stupňů
-  back_buttons(15); // otočí se o 180 stupňů
-  aktualni_pozice.x =stred_od_zadu; // Nastaví aktuální pozici na střed
+  aktualni_pozice.y = 450;
+  close_r_box();
+  Serial.printf("[Kolo 1] UKONCENO. Pozice: X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
+  
+  // ==================== KOLO 2 ====================
+  Serial.printf("\n--- [KOLO 2] START --- Pozice: X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
+  
+  Serial.printf("[Kolo 2] Jizda na sever: jed_a_chytej_puky(%d, Y-osa)\n", 1850 - aktualni_pozice.y);
+  jed_a_chytej_puky(1850 - aktualni_pozice.y, false);
+  
+  Serial.println("[Kolo 2] Otoceni 90° doleva na zapad...");
+  turn_on_spot_left(90, 10);
+  
+  Serial.println("[Kolo 2] Zarovnani o Vychodni stenu...");
+  smart_align_wall(true, 0, stred_od_zadu, 15);
+  
+  Serial.printf("[Kolo 2] Jizda na zapad: jed_a_chytej_puky(%d, X-osa)\n", 2050 - aktualni_pozice.x);
   jed_a_chytej_puky(2050 - aktualni_pozice.x, true);
+  
+  Serial.println("[Kolo 2] Otoceni 90° doleva na jih...");
   turn_on_spot_left(90, 10);
-  // open_l_box(); // Otevře levý box --- cervene -- souperovi puky -- zakomentováno v modra()
+  
+  Serial.println("[Kolo 2] Popojeti na jih: jed_a_chytej_puky(600, Y-osa, zpet)...");
   jed_a_chytej_puky(600, false, false);
-  // close_l_box(); // Zavře levý box -- zakomentováno v modra()
-  turn_on_spot_left(90, 10); // otočí se o 90 stupňů
-  back_buttons(15); // otočí se o 180 stupňů
-  // open_l_box(); // Otevře pravý box --- modre -- svoje puky -- zakomentováno v modra()
-  aktualni_pozice.x = 2500- stred_od_zadu; // Nastaví aktuální pozici na střed
-  jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false); // jede do pravé krabice
-  turn_on_spot_left(180, 10); // otočí se o 90 stupňů
-  // close_l_box(); // Zavře levý box -- zakomentováno v modra()
-  back_buttons(15); // otočí se o 180 stupňů
-  forward(70, 20); // Přejede do středu
-  turn_on_spot_right(90, 10); // otočí se o 90 stupňů
-  delay(1000);
-  back_buttons(15); // otočí se o 180 stupňů
-  forward(70, 20); // Přejede do středu
-  aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
-  aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
+  
+  Serial.println("[Kolo 2] Otoceni 90° doleva na vychod...");
+  turn_on_spot_left(90, 10);
+  
+  Serial.println("[Kolo 2] Zarovnani o Zapadni stenu (na zacatku vlevo)...");
+  smart_align_wall(true, 2500, 2500 - stred_od_zadu, 15);
+  
+  Serial.printf("[Kolo 2] Jizda na vychod k pravym krabicim: jed_a_chytej_puky(%d, X-osa, zpet)\n", aktualni_pozice.x - stred_od_predu - 200);
+  jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false);
+  
+  Serial.println("[Kolo 2] Otoceni 180° na zapad...");
+  turn_on_spot_left(180, 10);
+  
+  Serial.println("[Kolo 2] Zarovnani o stenu...");
+  smart_align_wall(true, 0, stred_od_zadu, 15);
+  
+  Serial.println("[Kolo 2] Spoustim smart_align_y...");
+  smart_align_y(aktualni_pozice.y);
+  
+  aktualni_pozice.x = 350;
+  aktualni_pozice.y = 350;
+  Serial.printf("[Kolo 2] Reset pred dojezdem: X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
+  
+  Serial.println("[Kolo 2] Spoustim dojed_na_svoje...");
   dojed_na_svoje(true);
-  open_r_box(); // Otevře pravý box --- modre -- svoje puky
+  
+  Serial.println("[Kolo 2] Vykladani nasich puku (pravy box)...");
+  open_r_box();
   forward(180, 15);
-  aktualni_pozice.y = 450; // Nastaví aktuální pozici na střed
-  close_r_box(); // Zavře pravý box
-  //////////////////////////////////////////////////////////
-  // druhé kolo ujeto!!!
-  ////////////////////////////////////////
-  jed_a_chytej_puky(1500 -aktualni_pozice.y, false);
-  turn_on_spot_left(90, 10); // otočí se o 90 stupňů
-  back_buttons(15); // otočí se o 180 stupňů
-  aktualni_pozice.x =stred_od_zadu; // Nastaví aktuální pozici na střed
+  aktualni_pozice.y = 450;
+  close_r_box();
+  Serial.printf("[Kolo 2] UKONCENO. Pozice: X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
+  
+  // ==================== KOLO 3 ====================
+  Serial.printf("\n--- [KOLO 3] START --- Pozice: X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
+  
+  Serial.printf("[Kolo 3] Jizda na sever: jed_a_chytej_puky(%d, Y-osa)\n", 1500 - aktualni_pozice.y);
+  jed_a_chytej_puky(1500 - aktualni_pozice.y, false);
+  
+  Serial.println("[Kolo 3] Otoceni 90° doleva na zapad...");
+  turn_on_spot_left(90, 10);
+  
+  Serial.println("[Kolo 3] Zarovnani o Vychodni stenu...");
+  smart_align_wall(true, 0, stred_od_zadu, 15);
+  
+  Serial.printf("[Kolo 3] Jizda na zapad: jed_a_chytej_puky(%d, X-osa)\n", 1500 - aktualni_pozice.x);
   jed_a_chytej_puky(1500 - aktualni_pozice.x, true);
+  
+  Serial.println("[Kolo 3] Otoceni 90° doleva na jih...");
   turn_on_spot_left(90, 10);
-  // open_l_box(); // Otevře levý box --- cervene -- souperovi puky -- zakomentováno v modra()
+  
+  Serial.println("[Kolo 3] Popojeti na jih: jed_a_chytej_puky(600, Y-osa, zpet)...");
   jed_a_chytej_puky(600, false, false);
-  // close_l_box(); // Zavře levý box -- zakomentováno v modra()
-  turn_on_spot_left(90, 10); // otočí se o 90 stupňů
-  back_buttons(15); // otočí se o 180 stupňů
-  // open_l_box(); // Otevře pravý box --- modre -- svoje puky -- zakomentováno v modra()
-  aktualni_pozice.x = 2500- stred_od_zadu; // Nastaví aktuální pozici na střed
-  jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false); // jede do pravé krabice
-  turn_on_spot_left(180, 10); // otočí se o 90 stupňů
-  // close_l_box(); // Zavře levý box -- zakomentováno v modra()
-  back_buttons(15); // otočí se o 180 stupňů
-  forward(70, 20); // Přejede do středu
-  turn_on_spot_right(90, 10); // otočí se o 90 stupňů
-  delay(1000);
-  back_buttons(15); // otočí se o 180 stupňů
-  forward(70, 20); // Přejede do středu
-  aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
-  aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
+  
+  Serial.println("[Kolo 3] Otoceni 90° doleva na vychod...");
+  turn_on_spot_left(90, 10);
+  
+  Serial.println("[Kolo 3] Zarovnani o Zapadni stenu (na zacatku vlevo)...");
+  smart_align_wall(true, 2500, 2500 - stred_od_zadu, 15);
+  
+  Serial.printf("[Kolo 3] Jizda na vychod: jed_a_chytej_puky(%d, X-osa, zpet)\n", aktualni_pozice.x - stred_od_predu - 200);
+  jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false);
+  
+  Serial.println("[Kolo 3] Otoceni 180° na zapad...");
+  turn_on_spot_left(180, 10);
+  
+  Serial.println("[Kolo 3] Zarovnani o stenu...");
+  smart_align_wall(true, 0, stred_od_zadu, 15);
+  
+  Serial.println("[Kolo 3] Spoustim smart_align_y...");
+  smart_align_y(aktualni_pozice.y);
+  
+  aktualni_pozice.x = 350;
+  aktualni_pozice.y = 350;
+  Serial.printf("[Kolo 3] Reset pred dojezdem: X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
+  
+  Serial.println("[Kolo 3] Spoustim dojed_na_svoje...");
   dojed_na_svoje(true);
-  open_r_box(); // Otevře pravý box --- modre -- svoje puky
+  
+  Serial.println("[Kolo 3] Vykladani nasich puku (pravy box)...");
+  open_r_box();
   forward(180, 15);
-  aktualni_pozice.y = 450; // Nastaví aktuální pozici na střed
-  close_r_box(); // Zavře pravý box
-
-////////treti kolo ujeto//////////////////////
-
-jed_a_chytej_puky(1000 -aktualni_pozice.y, false);
-  turn_on_spot_left(90, 10); // otočí se o 90 stupňů
-  back_buttons(15); // otočí se o 180 stupňů
-  aktualni_pozice.x =stred_od_zadu; // Nastaví aktuální pozici na střed
+  aktualni_pozice.y = 450;
+  close_r_box();
+  Serial.printf("[Kolo 3] UKONCENO. Pozice: X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
+  
+  // ==================== KOLO 4 ====================
+  Serial.printf("\n--- [KOLO 4] START --- Pozice: X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
+  
+  Serial.printf("[Kolo 4] Jizda na sever: jed_a_chytej_puky(%d, Y-osa)\n", 1000 - aktualni_pozice.y);
+  jed_a_chytej_puky(1000 - aktualni_pozice.y, false);
+  
+  Serial.println("[Kolo 4] Otoceni 90° doleva na zapad...");
+  turn_on_spot_left(90, 10);
+  
+  Serial.println("[Kolo 4] Zarovnani o Vychodni stenu...");
+  smart_align_wall(true, 0, stred_od_zadu, 15);
+  
+  Serial.printf("[Kolo 4] Jizda na zapad: jed_a_chytej_puky(%d, X-osa)\n", 1000 - aktualni_pozice.x);
   jed_a_chytej_puky(1000 - aktualni_pozice.x, true);
+  
+  Serial.println("[Kolo 4] Otoceni 90° doleva na jih...");
   turn_on_spot_left(90, 10);
-  open_l_box(); // Otevře levý box --- cervene -- souperovi puky
+  
+  Serial.println("[Kolo 4] Vykladani souperovych puku (levy box)...");
+  open_l_box();
+  
+  Serial.println("[Kolo 4] Popojeti na jih: jed_a_chytej_puky(600, Y-osa, zpet)...");
   jed_a_chytej_puky(600, false, false);
-  close_l_box(); // Zavře levý box
-  turn_on_spot_left(90, 10); // otočí se o 90 stupňů
-  back_buttons(15); // otočí se o 180 stupňů
-  open_l_box(); // Otevře pravý box --- modre -- svoje puky
-  aktualni_pozice.x = 2500- stred_od_zadu; // Nastaví aktuální pozici na střed
-  jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false); // jede do pravé krabice
-  turn_on_spot_left(180, 10); // otočí se o 90 stupňů
-  close_l_box(); // Zavře levý box
-  back_buttons(15); // otočí se o 180 stupňů
-  forward(70, 20); // Přejede do středu
-  turn_on_spot_right(90, 10); // otočí se o 90 stupňů
-  delay(1000);
-  back_buttons(15); // otočí se o 180 stupňů
-  forward(70, 20); // Přejede do středu
-  aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
-  aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
+  close_l_box();
+  
+  Serial.println("[Kolo 4] Otoceni 90° doleva na vychod...");
+  turn_on_spot_left(90, 10);
+  
+  Serial.println("[Kolo 4] Zarovnani o Zapadni stenu (na zacatku vlevo)...");
+  smart_align_wall(true, 2500, 2500 - stred_od_zadu, 15);
+  
+  Serial.println("[Kolo 4] Vykladani nasich puku (levy box) - zahajeni...");
+  open_l_box(); // Otevře pravý box --- modre -- svoje puky (zůstalo dle orig. kódu)
+  
+  Serial.printf("[Kolo 4] Jizda na vychod: jed_a_chytej_puky(%d, X-osa, zpet)\n", aktualni_pozice.x - stred_od_predu - 200);
+  jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false);
+  
+  Serial.println("[Kolo 4] Otoceni 180° na zapad...");
+  turn_on_spot_left(180, 10);
+  close_l_box();
+  
+  Serial.println("[Kolo 4] Zarovnani o stenu...");
+  smart_align_wall(true, 0, stred_od_zadu, 15);
+  
+  Serial.println("[Kolo 4] Spoustim smart_align_y...");
+  smart_align_y(aktualni_pozice.y);
+  
+  aktualni_pozice.x = 350;
+  aktualni_pozice.y = 350;
+  Serial.printf("[Kolo 4] Reset pred dojezdem: X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
+  
+  Serial.println("[Kolo 4] Spoustim dojed_na_svoje...");
   dojed_na_svoje(true);
-  open_r_box(); // Otevře pravý box --- modre -- svoje puky
+  
+  Serial.println("[Kolo 4] Vykladani nasich puku (pravy box)...");
+  open_r_box();
   forward(180, 15);
-  aktualni_pozice.y = 450; // Nastaví aktuální pozici na střed
-  close_r_box(); // Zavře pravý box
-
-
-  //////////////////////////////////////////////////////////
-
+  aktualni_pozice.y = 450;
+  close_r_box();
+  
+  Serial.println("\n=== [STRATEGIE] MODRA KOMPLETNE DOKONCENA ===\n");
+  
   rkBuzzerSet(true);
   delay(500);
   rkBuzzerSet(false);
@@ -591,7 +736,6 @@ jed_a_chytej_puky(1000 -aktualni_pozice.y, false);
   rkBuzzerSet(true);
   delay(500);
   rkBuzzerSet(false);
-  /////////////////////////////////////////////////////////////
 }
 
   
@@ -600,141 +744,224 @@ jed_a_chytej_puky(1000 -aktualni_pozice.y, false);
 
 
 void cervena(){
-  Serial.println("Cervena barva");
-  jed_a_chytej_puky(2150 - aktualni_pozice.y, false);
-  turn_on_spot_left(90, 10); // otočí se o 90 stupňů
-  back_buttons(15); // otočí se o 180 stupňů
-  // open_r_box(); // zakomentováno: pravý box (modrý) v cervena()
-  aktualni_pozice.x =stred_od_zadu; // Nastaví aktuální pozici na střed
-  delay(100);
-  jed_a_chytej_puky(2150 - aktualni_pozice.x, true);
-  // close_r_box(); // Zavře pravý box -- zakomentováno: pravý box (modrý) v cervena()
+  Serial.println("\n=== [STRATEGIE] SPUSTENA CERVENA ===\n");
   
+  // ==================== KOLO 1 ====================
+  Serial.printf("\n--- [KOLO 1] START --- Pozice: X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
+  
+  Serial.printf("[Kolo 1] Jizda na sever: jed_a_chytej_puky(%d, Y-osa)\n", 2150 - aktualni_pozice.y);
+  jed_a_chytej_puky(2150 - aktualni_pozice.y, false);
+  
+  Serial.println("[Kolo 1] Otoceni 90° doleva na zapad...");
   turn_on_spot_left(90, 10);
-  back_buttons(15);
-  aktualni_pozice.y = 2500- stred_od_zadu; // Nastaví aktuální pozici na střed
-  jed_a_chytej_puky((aktualni_pozice.y- stred_od_predu- 200), false, false); // jede do levé krabice
-  turn_on_spot_left(90, 10); // otočí se o 90 stupňů
-  // open_r_box(); // Otevře pravý box --- cervene -- souperovi puky -- zakomentováno v cervena()
-  jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false); // jede do levé krabice
-  // close_r_box(); // Zavře pravý box -- zakomentováno v cervena()
-  turn_on_spot_left(182, 10); // otočí se o 90 stupňů
-  back_buttons(15); // otočí se o 180 stup
-  forward(70, 20); // Přejede do středu
-  turn_on_spot_right(90, 10); // otočí se o 90 stupňů
-  delay(1000);
-  back_buttons(15); // otočí se o 180 stupňů
-  forward(70, 20); // Přejede do středu
+  
+  Serial.println("[Kolo 1] Zarovnani o pravou (Vychodni) stenu (X=0)...");
+  smart_align_wall(true, 0, stred_od_zadu, 15);
+  delay(100);
+  
+  Serial.printf("[Kolo 1] Jizda na zapad k levym krabicim: jed_a_chytej_puky(%d, X-osa)\n", 2150 - aktualni_pozice.x);
+  jed_a_chytej_puky(2150 - aktualni_pozice.x, true);
+  
+  Serial.println("[Kolo 1] Preskakuji couvani k souperove stene Y=2500.");
+  turn_on_spot_left(90, 10); // pouze se otocime na jih
+  
+  Serial.printf("[Kolo 1] Jizda na jih podel levych krabic: jed_a_chytej_puky(%d, Y-osa, zpet)\n", aktualni_pozice.y - stred_od_predu - 200);
+  jed_a_chytej_puky((aktualni_pozice.y - stred_od_predu - 200), false, false);
+  
+  Serial.println("[Kolo 1] Otoceni 90° doleva na vychod...");
+  turn_on_spot_left(90, 10);
+  
+  Serial.printf("[Kolo 1] Jizda na vychod k leve krabici: jed_a_chytej_puky(%d, X-osa, zpet)\n", aktualni_pozice.x - stred_od_predu - 200);
+  jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false);
+  
+  Serial.println("[Kolo 1] Otoceni 182° na zapad...");
+  turn_on_spot_left(182, 10);
+  
+  Serial.println("[Kolo 1] Zarovnani o stenu...");
+  smart_align_wall(true, 0, stred_od_zadu, 15);
+  
+  Serial.println("[Kolo 1] Spoustim smart_align_y...");
+  smart_align_y(aktualni_pozice.y);
   delay(200);
-  aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
-  aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
+  
+  aktualni_pozice.x = 350;
+  aktualni_pozice.y = 350;
+  Serial.printf("[Kolo 1] Reset pred dojezdem: X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
+  
+  Serial.println("[Kolo 1] Spoustim dojed_na_svoje...");
   dojed_na_svoje(false);
-  open_l_box(); // Otevře pravý box --- modre -- svoje puky
+  
+  Serial.println("[Kolo 1] Vykladani nasich puku (levy box)...");
+  open_l_box();
   forward(100, 15);
-  aktualni_pozice.y = 450; // Nastaví aktuální pozici na střed
-  close_l_box(); // Zavře pravý box
-  //////////////////////////////////////////////////
-  //prvni kolo ujeto!!!
-  ////////////////////////////////////////
-  jed_a_chytej_puky(1850 -aktualni_pozice.y, false);
-  turn_on_spot_left(90, 10); // otočí se o 90 stupňů
-  back_buttons(15); // otočí se o 180 stupňů
-  aktualni_pozice.x =stred_od_zadu; // Nastaví aktuální pozici na střed
+  aktualni_pozice.y = 450;
+  close_l_box();
+  Serial.printf("[Kolo 1] UKONCENO. Aktualni pozice: X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
+  
+  // ==================== KOLO 2 ====================
+  Serial.printf("\n--- [KOLO 2] START --- Pozice: X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
+  
+  Serial.printf("[Kolo 2] Jizda na sever: jed_a_chytej_puky(%d, Y-osa)\n", 1850 - aktualni_pozice.y);
+  jed_a_chytej_puky(1850 - aktualni_pozice.y, false);
+  
+  Serial.println("[Kolo 2] Otoceni 90° doleva na zapad...");
+  turn_on_spot_left(90, 10);
+  
+  Serial.println("[Kolo 2] Zarovnani o Vychodni stenu...");
+  smart_align_wall(true, 0, stred_od_zadu, 15);
+  
+  Serial.printf("[Kolo 2] Jizda na zapad: jed_a_chytej_puky(%d, X-osa)\n", 2050 - aktualni_pozice.x);
   jed_a_chytej_puky(2050 - aktualni_pozice.x, true);
+  
+  Serial.println("[Kolo 2] Otoceni 90° doleva na jih...");
   turn_on_spot_left(90, 10);
-  open_r_box(); // Otevře levý box --- cervene -- souperovi puky
+  
+  Serial.println("[Kolo 2] Vykladani souperovych puku (pravy box)...");
+  open_r_box();
+  
+  Serial.println("[Kolo 2] Popojeti na jih: jed_a_chytej_puky(600, Y-osa, zpet)...");
   jed_a_chytej_puky(600, false, false);
-  close_r_box(); // Zavře levý box
-  turn_on_spot_left(90, 10); // otočí se o 90 stupňů
-  back_buttons(15); // otočí se o 180 stupňů
-  // open_r_box(); // Otevře pravý box --- modre -- svoje puky -- zakomentováno v cervena()
-  aktualni_pozice.x = 2500- stred_od_zadu; // Nastaví aktuální pozici na střed
-  jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false); // jede do pravé krabice
-  turn_on_spot_left(180, 10); // otočí se o 90 stupňů
-  // close_r_box(); // Zavře pravý box -- zakomentováno v cervena()
-  back_buttons(15); // otočí se o 180 stupňů
-  forward(70, 20); // Přejede do středu
-  turn_on_spot_right(90, 10); // otočí se o 90 stupňů
-  delay(1000);
-  back_buttons(15); // otočí se o 180 stupňů
-  forward(70, 20); // Přejede do středu
-  aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
-  aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
+  close_r_box();
+  
+  Serial.println("[Kolo 2] Otoceni 90° doleva na vychod...");
+  turn_on_spot_left(90, 10);
+  
+  Serial.println("[Kolo 2] Zarovnani o Zapadni stenu (na zacatku vlevo)...");
+  smart_align_wall(true, 2500, 2500 - stred_od_zadu, 15);
+  
+  Serial.printf("[Kolo 2] Jizda na vychod k pravym krabicim: jed_a_chytej_puky(%d, X-osa, zpet)\n", aktualni_pozice.x - stred_od_predu - 200);
+  jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false);
+  
+  Serial.println("[Kolo 2] Otoceni 180° na zapad...");
+  turn_on_spot_left(180, 10);
+  
+  Serial.println("[Kolo 2] Zarovnani o stenu...");
+  smart_align_wall(true, 0, stred_od_zadu, 15);
+  
+  Serial.println("[Kolo 2] Spoustim smart_align_y...");
+  smart_align_y(aktualni_pozice.y);
+  
+  aktualni_pozice.x = 350;
+  aktualni_pozice.y = 350;
+  Serial.printf("[Kolo 2] Reset pred dojezdem: X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
+  
+  Serial.println("[Kolo 2] Spoustim dojed_na_svoje...");
   dojed_na_svoje(false);
-  open_l_box(); // Otevře pravý box --- modre -- svoje puky
+  
+  Serial.println("[Kolo 2] Vykladani nasich puku (levy box)...");
+  open_l_box();
   forward(180, 15);
-  aktualni_pozice.y = 450; // Nastaví aktuální pozici na střed
-  close_l_box(); // Zavře pravý box
-  //////////////////////////////////////////////////////////
-  // druhé kolo ujeto!!!
-  ////////////////////////////////////////
-  jed_a_chytej_puky(1500 -aktualni_pozice.y, false);
-  turn_on_spot_left(90, 10); // otočí se o 90 stupňů
-  back_buttons(15); // otočí se o 180 stupňů
-  aktualni_pozice.x =stred_od_zadu; // Nastaví aktuální pozici na střed
+  aktualni_pozice.y = 450;
+  close_l_box();
+  Serial.printf("[Kolo 2] UKONCENO. Pozice: X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
+  
+  // ==================== KOLO 3 ====================
+  Serial.printf("\n--- [KOLO 3] START --- Pozice: X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
+  
+  Serial.printf("[Kolo 3] Jizda na sever: jed_a_chytej_puky(%d, Y-osa)\n", 1500 - aktualni_pozice.y);
+  jed_a_chytej_puky(1500 - aktualni_pozice.y, false);
+  
+  Serial.println("[Kolo 3] Otoceni 90° doleva na zapad...");
+  turn_on_spot_left(90, 10);
+  
+  Serial.println("[Kolo 3] Zarovnani o Vychodni stenu...");
+  smart_align_wall(true, 0, stred_od_zadu, 15);
+  
+  Serial.printf("[Kolo 3] Jizda na zapad: jed_a_chytej_puky(%d, X-osa)\n", 1500 - aktualni_pozice.x);
   jed_a_chytej_puky(1500 - aktualni_pozice.x, true);
+  
+  Serial.println("[Kolo 3] Otoceni 90° doleva na jih...");
   turn_on_spot_left(90, 10);
-  // open_r_box(); // Otevře pravý box --- cervene -- souperovi puky -- zakomentováno v cervena()
+  
+  Serial.println("[Kolo 3] Popojeti na jih: jed_a_chytej_puky(600, Y-osa, zpet)...");
   jed_a_chytej_puky(600, false, false);
-  // close_r_box(); // Zavře pravý box -- zakomentováno v cervena()
-  turn_on_spot_left(90, 10); // otočí se o 90 stupňů
-  back_buttons(15); // otočí se o 180 stupňů
-  // open_r_box(); // Otevře pravý box --- modre -- svoje puky -- zakomentováno v cervena()
-  aktualni_pozice.x = 2500- stred_od_zadu; // Nastaví aktuální pozici na střed
-  jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false); // jede do pravé krabice
-  turn_on_spot_left(180, 10); // otočí se o 90 stupňů
-  // close_r_box(); // Zavře pravý box -- zakomentováno v cervena()
-  back_buttons(15); // otočí se o 180 stupňů
-  forward(70, 20); // Přejede do středu
-  turn_on_spot_right(90, 10); // otočí se o 90 stupňů
-  delay(1000);
-  back_buttons(15); // otočí se o 180 stupňů
-  forward(70, 20); // Přejede do středu
-  aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
-  aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
+  
+  Serial.println("[Kolo 3] Otoceni 90° doleva na vychod...");
+  turn_on_spot_left(90, 10);
+  
+  Serial.println("[Kolo 3] Zarovnani o Zapadni stenu (na zacatku vlevo)...");
+  smart_align_wall(true, 2500, 2500 - stred_od_zadu, 15);
+  
+  Serial.printf("[Kolo 3] Jizda na vychod: jed_a_chytej_puky(%d, X-osa, zpet)\n", aktualni_pozice.x - stred_od_predu - 200);
+  jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false);
+  
+  Serial.println("[Kolo 3] Otoceni 180° na zapad...");
+  turn_on_spot_left(180, 10);
+  
+  Serial.println("[Kolo 3] Zarovnani o stenu...");
+  smart_align_wall(true, 0, stred_od_zadu, 15);
+  
+  Serial.println("[Kolo 3] Spoustim smart_align_y...");
+  smart_align_y(aktualni_pozice.y);
+  
+  aktualni_pozice.x = 350;
+  aktualni_pozice.y = 350;
+  Serial.printf("[Kolo 3] Reset pred dojezdem: X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
+  
+  Serial.println("[Kolo 3] Spoustim dojed_na_svoje...");
   dojed_na_svoje(false);
-  open_l_box(); // Otevře pravý box --- modre -- svoje puky
+  
+  Serial.println("[Kolo 3] Vykladani nasich puku (levy box)...");
+  open_l_box();
   forward(180, 15);
-  aktualni_pozice.y = 450; // Nastaví aktuální pozici na střed
-  close_l_box(); // Zavře pravý box
-
-    //////////////////////////////////////////////////////////
-  // tretí kolo ujeto!!!
-  ////////////////////////////////////////
-
-    jed_a_chytej_puky(1000 -aktualni_pozice.y, false);
-  turn_on_spot_left(90, 10); // otočí se o 90 stupňů
-  back_buttons(15); // otočí se o 180 stupňů
-  aktualni_pozice.x =stred_od_zadu; // Nastaví aktuální pozici na střed
+  aktualni_pozice.y = 450;
+  close_l_box();
+  Serial.printf("[Kolo 3] UKONCENO. Pozice: X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
+  
+  // ==================== KOLO 4 ====================
+  Serial.printf("\n--- [KOLO 4] START --- Pozice: X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
+  
+  Serial.printf("[Kolo 4] Jizda na sever: jed_a_chytej_puky(%d, Y-osa)\n", 1000 - aktualni_pozice.y);
+  jed_a_chytej_puky(1000 - aktualni_pozice.y, false);
+  
+  Serial.println("[Kolo 4] Otoceni 90° doleva na zapad...");
+  turn_on_spot_left(90, 10);
+  
+  Serial.println("[Kolo 4] Zarovnani o Vychodni stenu...");
+  smart_align_wall(true, 0, stred_od_zadu, 15);
+  
+  Serial.printf("[Kolo 4] Jizda na zapad: jed_a_chytej_puky(%d, X-osa)\n", 1000 - aktualni_pozice.x);
   jed_a_chytej_puky(1000 - aktualni_pozice.x, true);
+  
+  Serial.println("[Kolo 4] Otoceni 90° doleva na jih...");
   turn_on_spot_left(90, 10);
-  // open_r_box(); // Otevře pravý box --- cervene -- souperovi puky -- zakomentováno v cervena()
+  
+  Serial.println("[Kolo 4] Popojeti na jih: jed_a_chytej_puky(600, Y-osa, zpet)...");
   jed_a_chytej_puky(600, false, false);
-  // close_r_box(); // Zavře pravý box -- zakomentováno v cervena()
-  turn_on_spot_left(90, 10); // otočí se o 90 stupňů
-  back_buttons(15); // otočí se o 180 stupňů
-  // open_r_box(); // Otevře pravý box --- modre -- svoje puky -- zakomentováno v cervena()
-  aktualni_pozice.x = 2500- stred_od_zadu; // Nastaví aktuální pozici na střed
-  jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false); // jede do pravé krabice
-  turn_on_spot_left(180, 10); // otočí se o 90 stupňů
-  // close_r_box(); // Zavře pravý box -- zakomentováno v cervena()
-  back_buttons(15); // otočí se o 180 stupňů
-  forward(70, 20); // Přejede do středu
-  turn_on_spot_right(90, 10); // otočí se o 90 stupňů
-  delay(1000);
-  back_buttons(15); // otočí se o 180 stupňů
-  forward(70, 20); // Přejede do středu
-  aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
-  aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
+  
+  Serial.println("[Kolo 4] Otoceni 90° doleva na vychod...");
+  turn_on_spot_left(90, 10);
+  
+  Serial.println("[Kolo 4] Zarovnani o Zapadni stenu (na zacatku vlevo)...");
+  smart_align_wall(true, 2500, 2500 - stred_od_zadu, 15);
+  
+  Serial.printf("[Kolo 4] Jizda na vychod: jed_a_chytej_puky(%d, X-osa, zpet)\n", aktualni_pozice.x - stred_od_predu - 200);
+  jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false);
+  
+  Serial.println("[Kolo 4] Otoceni 180° na zapad...");
+  turn_on_spot_left(180, 10);
+  
+  Serial.println("[Kolo 4] Zarovnani o stenu...");
+  smart_align_wall(true, 0, stred_od_zadu, 15);
+  
+  Serial.println("[Kolo 4] Spoustim smart_align_y...");
+  smart_align_y(aktualni_pozice.y);
+  
+  aktualni_pozice.x = 350;
+  aktualni_pozice.y = 350;
+  Serial.printf("[Kolo 4] Reset pred dojezdem: X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
+  
+  Serial.println("[Kolo 4] Spoustim dojed_na_svoje...");
   dojed_na_svoje(false);
-  open_l_box(); // Otevře pravý box --- modre -- svoje puky
+  
+  Serial.println("[Kolo 4] Vykladani nasich puku (levy box)...");
+  open_l_box();
   forward(180, 15);
-  aktualni_pozice.y = 450; // Nastaví aktuální pozici na střed
-  close_l_box(); // Zavře pravý box
-
-
-  //////////////////////////////////////////////////////////
-
+  aktualni_pozice.y = 450;
+  close_l_box();
+  
+  Serial.println("\n=== [STRATEGIE] CERVENA KOMPLETNE DOKONCENA ===\n");
+  
   rkBuzzerSet(true);
   delay(500);
   rkBuzzerSet(false);
@@ -742,7 +969,6 @@ void cervena(){
   rkBuzzerSet(true);
   delay(500);
   rkBuzzerSet(false);
-
 }
 void setup() {
   Serial.begin(115200);
@@ -792,10 +1018,11 @@ void setup() {
     printf("Robotka started!\n");
     pinMode(34, INPUT_PULLUP);
     pinMode(35, INPUT_PULLUP);
-    // Inicializace chytrého serva
     rkSmartServoInit(0, 0, 240);
-    rkLedRed(true); // Turn on red LED
-    rkLedBlue(true); // Turn on blue LED
+    rkLedYellow(true); // Žlutá svítí na začátku při čekání na výběr
+    rkLedRed(false);
+    rkLedBlue(false);
+    rkLedGreen(false);
     pinMode(21, PULLUP);
     pinMode(22, PULLUP);
     pinMode(14, PULLUP);
@@ -815,6 +1042,9 @@ void setup() {
 
 void loop() {
   if(rkButtonIsPressed(BTN_LEFT)) {
+    rkLedYellow(false);
+    rkLedBlue(true);
+    rkLedRed(false);
     zavreni_dvirek();
     close_l_box();
     close_r_box();
@@ -823,6 +1053,9 @@ void loop() {
     modra();
   }
   else if(rkButtonIsPressed(BTN_RIGHT)) {
+    rkLedYellow(false);
+    rkLedRed(true);
+    rkLedBlue(false);
     zavreni_dvirek();
     close_l_box();
     close_r_box();
