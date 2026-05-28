@@ -23,6 +23,19 @@ int stred_od_boku = 150;
 // Globální proměnná pro aktuální pozici
 Pozice aktualni_pozice = {350 , 350};
 
+// Cílové souřadnice pro jednotlivé jízdy (kola)
+int jizda1_x = 2150;
+int jizda1_y = 1700;
+
+int jizda2_x = 1900;
+int jizda2_y = 1500;
+
+int jizda3_x = 1500;
+int jizda3_y = 1300;
+
+int jizda4_x = 1200;
+int jizda4_y = 2050;
+
 volatile bool puck_handling = false;
 String color_log_history = "";
 int log_counter = 0;
@@ -62,9 +75,7 @@ bool je_neco_vepredu(int distance_mereni){
   if (U4_distance < 1){
       U4_distance = 10000; // pokud je vzdálenost menší než 1, nastaví se na 10000
   }
-    Serial.printf("U1: %d, U2: %d, U4: %d\n", U1_distance, U2_distance, U4_distance);
     if (U1_distance < distance_mereni || U2_distance < distance_mereni || U4_distance < distance_mereni) {
-        Serial.printf("Přední senzory: U1: %d, U2: %d, U4: %d\n", U1_distance, U2_distance, U4_distance);
         rkBuzzerSet(true);
         delay(100);
         rkBuzzerSet(false);
@@ -73,9 +84,9 @@ bool je_neco_vepredu(int distance_mereni){
     return false;
 }
 bool davam_prednost_z_prava = false;
-bool detekce_soupere(){
-  Serial.printf("U1: %d, U2: %d, U3: %d\n, U4: %d ", rkUltraMeasure(1), rkUltraMeasure(2), rkUltraMeasure(3), rkUltraMeasure(4));
-    if(je_neco_vepredu(200)) {
+bool detekce_soupere(int distance_mereni = 200){
+    if(je_neco_vepredu(distance_mereni)) {
+        Serial.println("Detekovan souper! Zastavuji.");
         rkMotorsSetSpeed(-22, -22); // Zastaví motory
         rkBuzzerSet(true);
         delay(300);
@@ -84,35 +95,12 @@ bool detekce_soupere(){
         rkMotorsSetSpeed(0, 0); // Zastaví motory
         return true; // Detekován soupeř
     }
-    if((rkUltraMeasure(3) < 200) && (rkUltraMeasure(3) > 1)&& (!davam_prednost_z_prava)) { // U3 je senzor vzadu
-        davam_prednost_z_prava = true; // Dáváme přednost zprava
-        for(int i = 56; i > 0; i -= 6) {
-            rkMotorsSetSpeed(i, i); // Zpomaluje motory
-            delay(10);
-        }
-        rkMotorsSetSpeed(0, 0);
-        int start_time = millis();
-        while (millis() - start_time < 5000) { // čeká 5 sekundy
-            if(je_neco_vepredu(200)){
-              rkMotorsSetSpeed(-22, -22); // Zastaví motory
-              rkBuzzerSet(true);
-              delay(300);
-              rkBuzzerSet(false);
-              delay(900);
-              rkMotorsSetSpeed(0, 0); // Zastaví motory
-              return true; // Detekován soupeř
-            }
-        }
-        Serial.println("Čekání na soupeře skončilo, ale nic se nenašlo.");
-        Serial.println("jedu dal.");
-        return false; // Čekání skončilo, ale soupeř nebyl detekován
-
-    }
-return false;
+    return false;
 }
 
 
 TaskHandle_t chytejPukyHandle = NULL; // Globální handle pro task
+TaskHandle_t mainTaskHandle = NULL;    // Globální handle pro hlavní loop task
 
 enum Barva { RED, BLUE};
 
@@ -143,13 +131,6 @@ DetekceBarvy Detekce_puku() {
     delay(20);
 
     if (rkColorSensorGetRGB("puky", &r1, &g1, &b1) && rkColorSensorGetRGB("zem", &r2, &g2, &b2)) {
-        Serial.print("PUKY R: "); Serial.print(r1, 3);
-        Serial.print(" G: "); Serial.print(g1, 3);
-        Serial.print(" B: "); Serial.print(b1, 3);
-        Serial.print(" | ZEM R: "); Serial.print(r2, 3);
-        Serial.print(" G: "); Serial.print(g2, 3);
-        Serial.print(" B: "); Serial.println(b2, 3);
-
         bool is_ground_red = (r2 > 130.0f) && ((r2 - g2) > 40.0f);
         bool is_ground_blue = (b2 > 80.0f) && ((b2 - r2) > 10.0f);
 
@@ -176,9 +157,6 @@ DetekceBarvy Kde_jsme() {
     delay(20);
 
     if (rkColorSensorGetRGB("zem", &r2, &g2, &b2)) {
-        Serial.print("ZEM_R: "); Serial.print(r2, 3);
-        Serial.print(" ZEM_G: "); Serial.print(g2, 3);
-        Serial.print(" ZEM_B: "); Serial.println(b2, 3);
         if ((r2 -38) > b2 && (r2-38) > g2) {
             vysledek.barva = RED;
             vysledek.je_tam = true;
@@ -196,10 +174,10 @@ DetekceBarvy Kde_jsme() {
     return vysledek;
 }
 void puk_do_l_boxu(){
-  rkSmartServoMove(0, 86, 180);
+  rkSmartServoMove(0, 160, 180);
 }
 void puk_do_r_boxu(){
-  rkSmartServoMove(0, 160, 180);
+  rkSmartServoMove(0, 86, 180);
 }
 void zavreni_dvirek(){
   rkSmartServoMove(0, 125, 130); // nahoru
@@ -214,9 +192,36 @@ void zavreni_prepazky(){
   delay(200);
 }
 void StopTask(void *pvParameters) {
-    vTaskDelay(4 * 60 * 1000 / portTICK_PERIOD_MS); // 3 minuty
-    Serial.println("Uplynuly 3 minuty, restartuji program...");
-    esp_restart(); // Restartuje ESP32
+    vTaskDelay(3 * 60 * 1000 / portTICK_PERIOD_MS); // 3 minuty
+    Serial.println("Uplynuly 3 minuty, vypinam pohyb a blikam...");
+    
+    // Suspendování hlavního úkolu, aby nevykonával další instrukce jízdy
+    if (mainTaskHandle != NULL) {
+        vTaskSuspend(mainTaskHandle);
+    }
+    
+    // Zastavení tasku pro chytání puků
+    if (chytejPukyHandle != NULL) {
+        vTaskDelete(chytejPukyHandle);
+        chytejPukyHandle = NULL;
+    }
+    
+    // Zastavení motorů
+    rkMotorsSetSpeed(0, 0);
+    
+    // Zhasnutí ostatních LED
+    rkLedYellow(false);
+    rkLedRed(false);
+    rkLedBlue(false);
+    
+    // Nekonečná smyčka blikání zelené LEDky
+    bool green_state = false;
+    while (true) {
+        green_state = !green_state;
+        rkLedGreen(green_state);
+        rkMotorsSetSpeed(0, 0);
+        delay(300);
+    }
     vTaskDelete(NULL);
 }
 
@@ -251,18 +256,17 @@ void ChytejPukyTask(void *pvParameters) {
                   delay(400);
                   otevreni_prepazky();
                   puck_in_r_box++;
+                  Serial.printf("Puky v pravém boxu: %d\n", puck_in_r_box);
                 }
             }
             puck_handling = false;
-        } else {
-            Serial.println("Puk nenalezen.");
         }
         vTaskDelay(200 / portTICK_PERIOD_MS); // malá pauza, aby task nebyl příliš rychlý
     }
     vTaskDelete(NULL); // kdyby někdy skončil
 }
 ///////////////////
-void jed_a_chytej_puky(int distance, bool x, bool kladna = true){
+void jed_a_chytej_puky(int distance, bool x, bool kladna = true, int opponent_detection_dist = 200){
   if (distance <= 0) return;
   // Reset pozic enkodérů
   rkMotorsSetPositionLeft(0);
@@ -272,7 +276,7 @@ void jed_a_chytej_puky(int distance, bool x, bool kladna = true){
   puck_handling = false; // Reset to false just in case
   xTaskCreate(ChytejPukyTask, "ChytejPuky", 2048, NULL, 1, &chytejPukyHandle);
 
-  Serial.printf("musi_jet::: distance: %d mm\n", distance);
+  Serial.printf("Jedu rovne (%d mm)\n", distance);
 
   float pos_left = 0;
   float pos_right = 0;
@@ -340,10 +344,7 @@ void jed_a_chytej_puky(int distance, bool x, bool kladna = true){
           rkMotorsSetSpeed(speed_left, speed_right);
       }
 
-      Serial.printf("[ENCODERY] left: %.1f mm, right: %.1f mm (handling puck: %s)\n", 
-                    pos_left, pos_right, puck_handling ? "YES" : "NO");
-
-      if(detekce_soupere()) {
+      if(detekce_soupere(opponent_detection_dist)) {
           break;
       }
       delay(10);
@@ -353,7 +354,6 @@ void jed_a_chytej_puky(int distance, bool x, bool kladna = true){
   pos_left = abs(rkMotorsGetPositionLeft(true));
   pos_right = abs(rkMotorsGetPositionRight(true));
   float ujeta_vzdalenost = (pos_left + pos_right) / 2.0f;
-  Serial.printf("[ENCODERY] final left: %.1f, right: %.1f, avg: %.1f mm\n", pos_left, pos_right, ujeta_vzdalenost);
   
   if(kladna){
     if(x) {
@@ -371,6 +371,7 @@ void jed_a_chytej_puky(int distance, bool x, bool kladna = true){
       aktualni_pozice.y = aktualni_pozice.y - (int)ujeta_vzdalenost;
     }
   }
+  Serial.printf("[POZICE] X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
   
   vTaskDelete(chytejPukyHandle);
   chytejPukyHandle = NULL; // Uvolníme task, pokud běžel
@@ -384,29 +385,39 @@ void jed_a_chytej_puky(int distance, bool x, bool kladna = true){
 void smart_align_wall(bool axis_x, int wall_coord, int target_reset_val, float speed) {
     int current_val = axis_x ? aktualni_pozice.x : aktualni_pozice.y;
     int dist = abs(current_val - wall_coord);
-    
-    Serial.printf("[SmartAlign] Kontrola steny: osa=%s, souradnice=%d, aktualni pozice=%d, odhad. vzdalenost=%d mm\n",
-                  axis_x ? "X" : "Y", wall_coord, current_val, dist);
                   
     if (dist <= 600) {
-        Serial.printf("[SmartAlign] Stena je blizko (%d mm <= 600 mm) -> couvam o stenu rychlosti %.1f\n", dist, speed);
+        Serial.println("Srovnavam se o stenu (couvani)");
         back_buttons(speed);
         if (axis_x) {
             aktualni_pozice.x = target_reset_val;
         } else {
             aktualni_pozice.y = target_reset_val;
         }
-        Serial.printf("[SmartAlign] Kalibrovano. Nova pozice %s = %d\n", axis_x ? "X" : "Y", target_reset_val);
-    } else {
-        Serial.printf("[SmartAlign] Stena je MOC DALEKO (%d mm > 600 mm) -> preskakuji couvani a kalibraci.\n", dist);
+        Serial.printf("[POZICE] X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
     }
 }
+
+// Makra pro automatický výpis aktuální pozice před a po otočení
+#define turn_on_spot_left(angle, speed) do { \
+    Serial.printf("Otacim se vlevo (%d stupnu)\n", (int)(angle)); \
+    Serial.printf("[POZICE] X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y); \
+    (turn_on_spot_left)(angle, speed); \
+    Serial.printf("[POZICE] X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y); \
+} while(0)
+
+#define turn_on_spot_right(angle, speed) do { \
+    Serial.printf("Otacim se vpravo (%d stupnu)\n", (int)(angle)); \
+    Serial.printf("[POZICE] X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y); \
+    (turn_on_spot_right)(angle, speed); \
+    Serial.printf("[POZICE] X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y); \
+} while(0)
 
 void dojed_na_svoje(bool modra){
   auto a = Kde_jsme(); // Zjistí, kde jsme
   if(modra){
-    if (a.je_tam && a.barva == BLUE) {
-      Serial.println("Jsem na modré barvě.");
+    if ((a.je_tam && a.barva == BLUE) || (aktualni_pozice.y <= 600 && aktualni_pozice.x <= 600)) {
+      Serial.println("Jsem na modré barvě (nebo doma dle odometrie).");
     } else {
       Serial.println("Nejsem na modré barvě, hledaM MODROUA");
       while(true) { // dokud nejsme na modré barvě
@@ -429,6 +440,7 @@ void dojed_na_svoje(bool modra){
         turn_on_spot_right(90, 10); // otočí se o 90 stupňů
         aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
         aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
+        Serial.printf("[POZICE] X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
         delay(200);
         break;
       }
@@ -438,8 +450,8 @@ void dojed_na_svoje(bool modra){
     }
   }
   else{
-    if (a.je_tam && a.barva == RED) {
-      Serial.println("Jsem na RED barvě.");
+    if ((a.je_tam && a.barva == RED) || (aktualni_pozice.y <= 600 && aktualni_pozice.x <= 600)) {
+      Serial.println("Jsem na RED barvě (nebo doma dle odometrie).");
     } else {
       Serial.println("Nejsem na RED barvě, hledaM RED");
       while(true) { // dokud nejsme na modré barvě
@@ -462,6 +474,7 @@ void dojed_na_svoje(bool modra){
         turn_on_spot_right(90, 10); // otočí se o 90 stupňů
         aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
         aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
+        Serial.printf("[POZICE] X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
         delay(200);
         break;
       }
@@ -512,8 +525,8 @@ void modra(){
   // ==================== KOLO 1 ====================
   Serial.printf("\n--- [KOLO 1] START --- Pozice: X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
   
-  Serial.printf("[Kolo 1] Jizda na sever: jed_a_chytej_puky(%d, Y-osa)\n", 2150 - aktualni_pozice.y);
-  jed_a_chytej_puky(2150 - aktualni_pozice.y, false);
+  Serial.printf("[Kolo 1] Jizda na sever: jed_a_chytej_puky(%d, Y-osa)\n", 1700 - aktualni_pozice.y);
+  jed_a_chytej_puky(1700 - aktualni_pozice.y, false);
   
   Serial.println("[Kolo 1] Otoceni 90° doleva na zapad...");
   turn_on_spot_left(90, 10);
@@ -521,12 +534,18 @@ void modra(){
   Serial.println("[Kolo 1] Zarovnani o pravou (Vychodni) stenu (X=0)...");
   smart_align_wall(true, 0, stred_od_zadu, 15);
   delay(100);
+
+  open_r_box();
+  
   
   Serial.printf("[Kolo 1] Jizda na zapad k levym krabicim: jed_a_chytej_puky(%d, X-osa)\n", 2150 - aktualni_pozice.x);
   jed_a_chytej_puky(2150 - aktualni_pozice.x, true);
   
   Serial.println("[Kolo 1] Preskakuji couvani k souperove stene Y=2500.");
   turn_on_spot_left(90, 10); // pouze se otocime na jih
+
+  close_r_box();
+  delay(100);
   
   Serial.printf("[Kolo 1] Jizda na jih podel levych krabic: jed_a_chytej_puky(%d, Y-osa, zpet)\n", aktualni_pozice.y - stred_od_predu - 200);
   jed_a_chytej_puky((aktualni_pozice.y - stred_od_predu - 200), false, false);
@@ -572,6 +591,8 @@ void modra(){
   
   Serial.println("[Kolo 2] Zarovnani o Vychodni stenu...");
   smart_align_wall(true, 0, stred_od_zadu, 15);
+
+  open_r_box();
   
   Serial.printf("[Kolo 2] Jizda na zapad: jed_a_chytej_puky(%d, X-osa)\n", 2050 - aktualni_pozice.x);
   jed_a_chytej_puky(2050 - aktualni_pozice.x, true);
@@ -698,15 +719,15 @@ void modra(){
   Serial.println("[Kolo 4] Zarovnani o Zapadni stenu (na zacatku vlevo)...");
   smart_align_wall(true, 2500, 2500 - stred_od_zadu, 15);
   
-  Serial.println("[Kolo 4] Vykladani nasich puku (levy box) - zahajeni...");
-  open_l_box(); // Otevře pravý box --- modre -- svoje puky (zůstalo dle orig. kódu)
+  Serial.println("[Kolo 4] Vykladani nasich puku (pravy box) - zahajeni...");
+  open_r_box(); // Otevře pravý box --- modre -- svoje puky
   
   Serial.printf("[Kolo 4] Jizda na vychod: jed_a_chytej_puky(%d, X-osa, zpet)\n", aktualni_pozice.x - stred_od_predu - 200);
   jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false);
   
   Serial.println("[Kolo 4] Otoceni 180° na zapad...");
   turn_on_spot_left(180, 10);
-  close_l_box();
+  close_r_box();
   
   Serial.println("[Kolo 4] Zarovnani o stenu...");
   smart_align_wall(true, 0, stred_od_zadu, 15);
@@ -749,8 +770,8 @@ void cervena(){
   // ==================== KOLO 1 ====================
   Serial.printf("\n--- [KOLO 1] START --- Pozice: X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
   
-  Serial.printf("[Kolo 1] Jizda na sever: jed_a_chytej_puky(%d, Y-osa)\n", 2150 - aktualni_pozice.y);
-  jed_a_chytej_puky(2150 - aktualni_pozice.y, false);
+  Serial.printf("[Kolo 1] Jizda na sever: jed_a_chytej_puky(%d, Y-osa)\n", jizda1_y - aktualni_pozice.y);
+  jed_a_chytej_puky(jizda1_y - aktualni_pozice.y, false);
   
   Serial.println("[Kolo 1] Otoceni 90° doleva na zapad...");
   turn_on_spot_left(90, 10);
@@ -758,18 +779,25 @@ void cervena(){
   Serial.println("[Kolo 1] Zarovnani o pravou (Vychodni) stenu (X=0)...");
   smart_align_wall(true, 0, stred_od_zadu, 15);
   delay(100);
+  open_r_box();
+  delay(100);
   
-  Serial.printf("[Kolo 1] Jizda na zapad k levym krabicim: jed_a_chytej_puky(%d, X-osa)\n", 2150 - aktualni_pozice.x);
-  jed_a_chytej_puky(2150 - aktualni_pozice.x, true);
+  Serial.printf("[Kolo 1] Jizda na zapad k levym krabicim: jed_a_chytej_puky(%d, X-osa)\n", jizda1_x - aktualni_pozice.x);
+  jed_a_chytej_puky(jizda1_x - aktualni_pozice.x, true);
   
   Serial.println("[Kolo 1] Preskakuji couvani k souperove stene Y=2500.");
   turn_on_spot_left(90, 10); // pouze se otocime na jih
+  delay(100);
+  close_r_box();
+  delay(100);
   
   Serial.printf("[Kolo 1] Jizda na jih podel levych krabic: jed_a_chytej_puky(%d, Y-osa, zpet)\n", aktualni_pozice.y - stred_od_predu - 200);
   jed_a_chytej_puky((aktualni_pozice.y - stred_od_predu - 200), false, false);
   
   Serial.println("[Kolo 1] Otoceni 90° doleva na vychod...");
   turn_on_spot_left(90, 10);
+
+  smart_align_wall(true, 2500, 2500 - stred_od_zadu, 15);
   
   Serial.printf("[Kolo 1] Jizda na vychod k leve krabici: jed_a_chytej_puky(%d, X-osa, zpet)\n", aktualni_pozice.x - stred_od_predu - 200);
   jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false);
@@ -778,10 +806,24 @@ void cervena(){
   turn_on_spot_left(182, 10);
   
   Serial.println("[Kolo 1] Zarovnani o stenu...");
-  smart_align_wall(true, 0, stred_od_zadu, 15);
+  //smart_align_wall(true, 0, stred_od_zadu, 15);// tady usime vzdy couvat....
+  back_buttons(18);
+  delay(200);
   
   Serial.println("[Kolo 1] Spoustim smart_align_y...");
-  smart_align_y(aktualni_pozice.y);
+
+  //nahrazuji smart_align_y(aktualni_pozice.y);
+
+  forward_acc(130,20);
+  delay(200);
+  
+  turn_on_spot_right(90, 10);
+  delay(100);
+
+  back_buttons(15);
+  delay(200);
+  
+  forward_acc(130,20);
   delay(200);
   
   aktualni_pozice.x = 350;
@@ -793,53 +835,75 @@ void cervena(){
   
   Serial.println("[Kolo 1] Vykladani nasich puku (levy box)...");
   open_l_box();
-  forward(100, 15);
-  aktualni_pozice.y = 450;
+  forward_acc(240, 15);
+  aktualni_pozice.y = 510;
   close_l_box();
   Serial.printf("[Kolo 1] UKONCENO. Aktualni pozice: X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
   
   // ==================== KOLO 2 ====================
   Serial.printf("\n--- [KOLO 2] START --- Pozice: X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
   
-  Serial.printf("[Kolo 2] Jizda na sever: jed_a_chytej_puky(%d, Y-osa)\n", 1850 - aktualni_pozice.y);
-  jed_a_chytej_puky(1850 - aktualni_pozice.y, false);
+  Serial.printf("[Kolo 2] Jizda na sever: jed_a_chytej_puky(%d, Y-osa)\n", jizda2_y - aktualni_pozice.y);
+  jed_a_chytej_puky(jizda2_y - aktualni_pozice.y, false);
   
   Serial.println("[Kolo 2] Otoceni 90° doleva na zapad...");
   turn_on_spot_left(90, 10);
   
   Serial.println("[Kolo 2] Zarovnani o Vychodni stenu...");
   smart_align_wall(true, 0, stred_od_zadu, 15);
+  delay(100);
+  open_r_box();
+  delay(100);
   
-  Serial.printf("[Kolo 2] Jizda na zapad: jed_a_chytej_puky(%d, X-osa)\n", 2050 - aktualni_pozice.x);
-  jed_a_chytej_puky(2050 - aktualni_pozice.x, true);
+  Serial.printf("[Kolo 2] Jizda na zapad: jed_a_chytej_puky(%d, X-osa)\n", jizda2_x - aktualni_pozice.x);
+  jed_a_chytej_puky(jizda2_x - aktualni_pozice.x, true);
   
   Serial.println("[Kolo 2] Otoceni 90° doleva na jih...");
   turn_on_spot_left(90, 10);
-  
-  Serial.println("[Kolo 2] Vykladani souperovych puku (pravy box)...");
-  open_r_box();
-  
-  Serial.println("[Kolo 2] Popojeti na jih: jed_a_chytej_puky(600, Y-osa, zpet)...");
-  jed_a_chytej_puky(600, false, false);
+  delay(100);
   close_r_box();
+  delay(100);
+  
+  
+  // Serial.println("[Kolo 2] Popojeti na jih: jed_a_chytej_puky(600, Y-osa, zpet)...");
+  jed_a_chytej_puky((aktualni_pozice.y - stred_od_predu - 550), false, false);
+  // close_r_box();
   
   Serial.println("[Kolo 2] Otoceni 90° doleva na vychod...");
   turn_on_spot_left(90, 10);
   
   Serial.println("[Kolo 2] Zarovnani o Zapadni stenu (na zacatku vlevo)...");
   smart_align_wall(true, 2500, 2500 - stred_od_zadu, 15);
+
+  open_r_box();
   
   Serial.printf("[Kolo 2] Jizda na vychod k pravym krabicim: jed_a_chytej_puky(%d, X-osa, zpet)\n", aktualni_pozice.x - stred_od_predu - 200);
-  jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 200, true, false);
+  jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 800, true, false);
+
+  close_r_box();
+
+  jed_a_chytej_puky((aktualni_pozice.x - stred_od_predu - 200), true, false);
   
   Serial.println("[Kolo 2] Otoceni 180° na zapad...");
   turn_on_spot_left(180, 10);
   
   Serial.println("[Kolo 2] Zarovnani o stenu...");
-  smart_align_wall(true, 0, stred_od_zadu, 15);
-  
+  //smart_align_wall(true, 0, stred_od_zadu, 15);// tady usime vzdy couvat....
+  back_buttons(18);
+  delay(200);
+    
   Serial.println("[Kolo 2] Spoustim smart_align_y...");
-  smart_align_y(aktualni_pozice.y);
+  forward_acc(130, 20);
+  delay(200);
+  
+  turn_on_spot_right(90, 10);
+  delay(100);
+
+  back_buttons(15);
+  delay(200);
+  
+  forward_acc(130, 20);
+  delay(200);
   
   aktualni_pozice.x = 350;
   aktualni_pozice.y = 350;
@@ -850,28 +914,34 @@ void cervena(){
   
   Serial.println("[Kolo 2] Vykladani nasich puku (levy box)...");
   open_l_box();
-  forward(180, 15);
-  aktualni_pozice.y = 450;
+  forward_acc(240, 15);
+  aktualni_pozice.y = 510;
   close_l_box();
   Serial.printf("[Kolo 2] UKONCENO. Pozice: X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
   
   // ==================== KOLO 3 ====================
   Serial.printf("\n--- [KOLO 3] START --- Pozice: X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
   
-  Serial.printf("[Kolo 3] Jizda na sever: jed_a_chytej_puky(%d, Y-osa)\n", 1500 - aktualni_pozice.y);
-  jed_a_chytej_puky(1500 - aktualni_pozice.y, false);
+  Serial.printf("[Kolo 3] Jizda na sever: jed_a_chytej_puky(%d, Y-osa)\n", jizda3_y - aktualni_pozice.y);
+  jed_a_chytej_puky(jizda3_y - aktualni_pozice.y, false);
   
   Serial.println("[Kolo 3] Otoceni 90° doleva na zapad...");
   turn_on_spot_left(90, 10);
   
   Serial.println("[Kolo 3] Zarovnani o Vychodni stenu...");
   smart_align_wall(true, 0, stred_od_zadu, 15);
+  delay(100);
+  open_r_box();
+  delay(100);
   
-  Serial.printf("[Kolo 3] Jizda na zapad: jed_a_chytej_puky(%d, X-osa)\n", 1500 - aktualni_pozice.x);
-  jed_a_chytej_puky(1500 - aktualni_pozice.x, true);
+  Serial.printf("[Kolo 3] Jizda na zapad: jed_a_chytej_puky(%d, X-osa)\n", jizda3_x - aktualni_pozice.x);
+  jed_a_chytej_puky(jizda3_x - aktualni_pozice.x, true);
   
   Serial.println("[Kolo 3] Otoceni 90° doleva na jih...");
   turn_on_spot_left(90, 10);
+  delay(100);
+  close_r_box();
+  delay(100);
   
   Serial.println("[Kolo 3] Popojeti na jih: jed_a_chytej_puky(600, Y-osa, zpet)...");
   jed_a_chytej_puky(600, false, false);
@@ -889,10 +959,22 @@ void cervena(){
   turn_on_spot_left(180, 10);
   
   Serial.println("[Kolo 3] Zarovnani o stenu...");
-  smart_align_wall(true, 0, stred_od_zadu, 15);
-  
+  //smart_align_wall(true, 0, stred_od_zadu, 15);// tady usime vzdy couvat....
+  back_buttons(18);
+  delay(200);
+    
   Serial.println("[Kolo 3] Spoustim smart_align_y...");
-  smart_align_y(aktualni_pozice.y);
+  forward_acc(130, 20);
+  delay(200);
+  
+  turn_on_spot_right(90, 10);
+  delay(100);
+
+  back_buttons(15);
+  delay(200);
+  
+  forward_acc(130, 20);
+  delay(200);
   
   aktualni_pozice.x = 350;
   aktualni_pozice.y = 350;
@@ -903,16 +985,17 @@ void cervena(){
   
   Serial.println("[Kolo 3] Vykladani nasich puku (levy box)...");
   open_l_box();
-  forward(180, 15);
-  aktualni_pozice.y = 450;
+  forward_acc(240, 15);
+  aktualni_pozice.y = 510;
   close_l_box();
   Serial.printf("[Kolo 3] UKONCENO. Pozice: X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
   
   // ==================== KOLO 4 ====================
   Serial.printf("\n--- [KOLO 4] START --- Pozice: X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
   
-  Serial.printf("[Kolo 4] Jizda na sever: jed_a_chytej_puky(%d, Y-osa)\n", 1000 - aktualni_pozice.y);
-  jed_a_chytej_puky(1000 - aktualni_pozice.y, false);
+  Serial.printf("[Kolo 4] Jizda na sever: jed_a_chytej_puky(%d, Y-osa)\n", jizda4_y - aktualni_pozice.y);
+  jed_a_chytej_puky(1600 - aktualni_pozice.y, false );
+  jed_a_chytej_puky(jizda4_y - aktualni_pozice.y, false, true, 50);
   
   Serial.println("[Kolo 4] Otoceni 90° doleva na zapad...");
   turn_on_spot_left(90, 10);
@@ -920,14 +1003,14 @@ void cervena(){
   Serial.println("[Kolo 4] Zarovnani o Vychodni stenu...");
   smart_align_wall(true, 0, stred_od_zadu, 15);
   
-  Serial.printf("[Kolo 4] Jizda na zapad: jed_a_chytej_puky(%d, X-osa)\n", 1000 - aktualni_pozice.x);
-  jed_a_chytej_puky(1000 - aktualni_pozice.x, true);
+  Serial.printf("[Kolo 4] Jizda na zapad: jed_a_chytej_puky(%d, X-osa)\n", jizda4_x - aktualni_pozice.x);
+  jed_a_chytej_puky(jizda4_x - aktualni_pozice.x, true);
   
   Serial.println("[Kolo 4] Otoceni 90° doleva na jih...");
   turn_on_spot_left(90, 10);
   
   Serial.println("[Kolo 4] Popojeti na jih: jed_a_chytej_puky(600, Y-osa, zpet)...");
-  jed_a_chytej_puky(600, false, false);
+  jed_a_chytej_puky((aktualni_pozice.y - stred_od_predu - 550), false, false);
   
   Serial.println("[Kolo 4] Otoceni 90° doleva na vychod...");
   turn_on_spot_left(90, 10);
@@ -942,10 +1025,22 @@ void cervena(){
   turn_on_spot_left(180, 10);
   
   Serial.println("[Kolo 4] Zarovnani o stenu...");
-  smart_align_wall(true, 0, stred_od_zadu, 15);
-  
+  //smart_align_wall(true, 0, stred_od_zadu, 15);// tady usime vzdy couvat....
+  back_buttons(18);
+  delay(200);
+    
   Serial.println("[Kolo 4] Spoustim smart_align_y...");
-  smart_align_y(aktualni_pozice.y);
+  forward_acc(130, 20);
+  delay(200);
+  
+  turn_on_spot_right(90, 10);
+  delay(100);
+
+  back_buttons(15);
+  delay(200);
+  
+  forward_acc(130, 20);
+  delay(200);
   
   aktualni_pozice.x = 350;
   aktualni_pozice.y = 350;
@@ -1042,6 +1137,7 @@ void setup() {
 
 void loop() {
   if(rkButtonIsPressed(BTN_LEFT)) {
+    mainTaskHandle = xTaskGetCurrentTaskHandle();
     rkLedYellow(false);
     rkLedBlue(true);
     rkLedRed(false);
@@ -1053,6 +1149,7 @@ void loop() {
     modra();
   }
   else if(rkButtonIsPressed(BTN_RIGHT)) {
+    mainTaskHandle = xTaskGetCurrentTaskHandle();
     rkLedYellow(false);
     rkLedRed(true);
     rkLedBlue(false);
