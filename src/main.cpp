@@ -206,7 +206,7 @@ void zavreni_dvirek(){
   delay(200);
 }
 void otevreni_prepazky(){
-  rkServosSetPosition(3, -90); // Servo 1 nastaví pnuti po 3minutach 90°
+  rkServosSetPosition(3, -90); // Servo 1 nastaví pnuti po 3minutach 90°...
   delay(200);
 }
 void zavreni_prepazky(){
