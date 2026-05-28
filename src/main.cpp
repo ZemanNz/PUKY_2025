@@ -149,27 +149,46 @@ DetekceBarvy Detekce_puku() {
 
 DetekceBarvy Kde_jsme() {
     DetekceBarvy vysledek;
-    rkColorSensorGetRGB("zem", &r2, &g2, &b2);
-    delay(20);
-    rkColorSensorGetRGB("zem", &r2, &g2, &b2);
-    delay(20);
-    rkColorSensorGetRGB("zem", &r2, &g2, &b2);
+    vysledek.je_tam = false;
+
+    Serial.println("[Kde_jsme] Ctu RGB zeme (pokus 1)...");
+    bool ok1 = rkColorSensorGetRGB("zem", &r2, &g2, &b2);
+    Serial.printf("[Kde_jsme] Pokus 1: ok=%d, R=%.3f, G=%.3f, B=%.3f\n", ok1, r2, g2, b2);
     delay(20);
 
-    if (rkColorSensorGetRGB("zem", &r2, &g2, &b2)) {
-        if ((r2 -38) > b2 && (r2-38) > g2) {
+    Serial.println("[Kde_jsme] Ctu RGB zeme (pokus 2)...");
+    bool ok2 = rkColorSensorGetRGB("zem", &r2, &g2, &b2);
+    Serial.printf("[Kde_jsme] Pokus 2: ok=%d, R=%.3f, G=%.3f, B=%.3f\n", ok2, r2, g2, b2);
+    delay(20);
+
+    Serial.println("[Kde_jsme] Ctu RGB zeme (pokus 3)...");
+    bool ok3 = rkColorSensorGetRGB("zem", &r2, &g2, &b2);
+    Serial.printf("[Kde_jsme] Pokus 3: ok=%d, R=%.3f, G=%.3f, B=%.3f\n", ok3, r2, g2, b2);
+    delay(20);
+
+    Serial.println("[Kde_jsme] Ctu RGB zeme (hlavni cteni)...");
+    bool ok4 = rkColorSensorGetRGB("zem", &r2, &g2, &b2);
+    Serial.printf("[Kde_jsme] Hlavni cteni: ok=%d, R=%.3f, G=%.3f, B=%.3f\n", ok4, r2, g2, b2);
+
+    if (ok4) {
+        Serial.printf("[Kde_jsme] Kriterium RED: (R - 38 > B && R - 38 > G) -> (%.3f - 38 > %.3f && %.3f - 38 > %.3f) -> (%.3f > %.3f && %.3f > %.3f)\n",
+                      r2, b2, r2, g2, r2 - 38.0f, b2, r2 - 38.0f, g2);
+        Serial.printf("[Kde_jsme] Kriterium BLUE: (B - 15 > R && B > 85) -> (%.3f - 15 > %.3f && %.3f > 85) -> (%.3f > %.3f && %.3f > 85)\n",
+                      b2, r2, b2, b2 - 15.0f, r2, b2);
+
+        if ((r2 - 38) > b2 && (r2 - 38) > g2) {
             vysledek.barva = RED;
             vysledek.je_tam = true;
-            Serial.println("Jsem na červené zemi.");
-        } else if ((b2 - 15 > r2 )&& (b2 > 85)) {//else if ((b2 > 90)&& (b2 -18) > r2 && (b2-18) > g2) {
+            Serial.println("[Kde_jsme] Detekovana cervena zeme.");
+        } else if ((b2 - 15 > r2) && (b2 > 85)) {
             vysledek.barva = BLUE;
             vysledek.je_tam = true;
-            Serial.println("Jsem na modré zemi.");
+            Serial.println("[Kde_jsme] Detekovana modra zeme.");
         } else {
-            vysledek.je_tam = false;
+            Serial.println("[Kde_jsme] Zadne zname zbarveni zeme.");
         }
     } else {
-        vysledek.je_tam = false;
+        Serial.println("[Kde_jsme] Selhalo hlavni cteni senzoru zeme.");
     }
     return vysledek;
 }
@@ -209,20 +228,17 @@ void StopTask(void *pvParameters) {
     // Zastavení motorů
     rkMotorsSetSpeed(0, 0);
     
-    // Zhasnutí ostatních LED
-    rkLedYellow(false);
-    rkLedRed(false);
-    rkLedBlue(false);
-    
-    // Nekonečná smyčka blikání zelené LEDky
-    bool green_state = false;
+    // Nekonečná smyčka blikání všech LEDek
+    bool led_state = false;
     while (true) {
-        green_state = !green_state;
-        rkLedGreen(green_state);
+        led_state = !led_state;
+        rkLedGreen(led_state);
+        rkLedYellow(led_state);
+        rkLedRed(led_state);
+        rkLedBlue(led_state);
         rkMotorsSetSpeed(0, 0);
         delay(300);
     }
-    vTaskDelete(NULL);
 }
 
 
@@ -414,72 +430,142 @@ void smart_align_wall(bool axis_x, int wall_coord, int target_reset_val, float s
 } while(0)
 
 void dojed_na_svoje(bool modra){
+  Serial.printf("[dojed_na_svoje] Spusteno s parametrem modra=%d\n", modra);
+  Serial.printf("[dojed_na_svoje] Aktualni pozice: X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
+  
+  Serial.println("[dojed_na_svoje] Volam Kde_jsme()...");
   auto a = Kde_jsme(); // Zjistí, kde jsme
+  Serial.printf("[dojed_na_svoje] Navrat z Kde_jsme(): je_tam=%d, barva=%d\n", a.je_tam, a.barva);
+
   if(modra){
     if ((a.je_tam && a.barva == BLUE) || (aktualni_pozice.y <= 600 && aktualni_pozice.x <= 600)) {
-      Serial.println("Jsem na modré barvě (nebo doma dle odometrie).");
+      Serial.println("[dojed_na_svoje] Podminka splnena. Jsem na modre barve (nebo doma dle odometrie).");
     } else {
-      Serial.println("Nejsem na modré barvě, hledaM MODROUA");
+      Serial.println("[dojed_na_svoje] Podminka nesplnena. Zacinam hledat modrou...");
+      int krok = 0;
       while(true) { // dokud nejsme na modré barvě
-      turn_on_spot_right(90, 10); // otočí se o 90 stupňů
-      delay(1000);
-      back_buttons(15); // otočí se o 180 stupňů
-      jed_a_chytej_puky(2800, true, false); // jede do středu
-      a = Kde_jsme(); // Zjistí, kde jsme
-      if(a.je_tam && a.barva == BLUE) {
-        Serial.println("Jsem na modré barvě.");
-        rkBuzzerSet(true);
+        krok++;
+        Serial.printf("[dojed_na_svoje] Krok %d: otaceni vlevo 90...\n", krok);
+        turn_on_spot_left(90, 10); // otočí se o 90 stupňů vlevo (původně vpravo)
         delay(1000);
-        rkBuzzerSet(false);
-        turn_on_spot_left(180, 10); // otočí se o 90 stupňů
-        back_buttons(15); // otočí se o 180 stupňů
-        forward(80, 20); // Přejede do středu
-        turn_on_spot_left(90, 10); // otočí se o 90 stupňů
-        back_buttons(15); // otočí se o 180 stupňů
-        forward(80, 20); // Přejede do středu
-        turn_on_spot_right(90, 10); // otočí se o 90 stupňů
-        aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
-        aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
-        Serial.printf("[POZICE] X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
-        delay(200);
-        break;
-      }
+        
+        Serial.printf("[dojed_na_svoje] Krok %d: couvani na zadni tlacitka...\n", krok);
+        back_buttons(15); // couvá na tlačítka
         delay(200);
 
+        Serial.printf("[dojed_na_svoje] Krok %d: volam Kde_jsme() po couvani...\n", krok);
+        a = Kde_jsme(); // Zjistí, kde jsme
+        Serial.printf("[dojed_na_svoje] Krok %d: Kde_jsme() navratilo je_tam=%d, barva=%d\n", krok, a.je_tam, a.barva);
+        
+        if(a.je_tam && a.barva == BLUE) {
+          Serial.println("[dojed_na_svoje] Modra nalezena po couvani!");
+          rkBuzzerSet(true);
+          delay(1000);
+          rkBuzzerSet(false);
+          turn_on_spot_left(180, 10);
+          back_buttons(15);
+          forward(80, 20);
+          turn_on_spot_right(90, 10);
+          back_buttons(15);
+          forward(80, 20);
+          aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
+          aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
+          Serial.printf("[POZICE] X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
+          delay(200);
+          break;
+        }
+        
+        Serial.printf("[dojed_na_svoje] Krok %d: jed_a_chytej_puky 2800...\n", krok);
+        jed_a_chytej_puky(2800, true, false); // jede do středu
+        
+        Serial.printf("[dojed_na_svoje] Krok %d: volam Kde_jsme() po jizde vpred...\n", krok);
+        a = Kde_jsme(); // Zjistí, kde jsme
+        Serial.printf("[dojed_na_svoje] Krok %d: Kde_jsme() navratilo je_tam=%d, barva=%d\n", krok, a.je_tam, a.barva);
+        
+        if(a.je_tam && a.barva == BLUE) {
+          Serial.println("[dojed_na_svoje] Modra nalezena pri jizde vpred!");
+          rkBuzzerSet(true);
+          delay(1000);
+          rkBuzzerSet(false);
+          turn_on_spot_left(180, 10);
+          back_buttons(15);
+          forward(80, 20);
+          turn_on_spot_right(90, 10);
+          back_buttons(15);
+          forward(80, 20);
+          aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
+          aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
+          Serial.printf("[POZICE] X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
+          delay(200);
+          break;
+        }
+        delay(200);
       }
     }
   }
   else{
     if ((a.je_tam && a.barva == RED) || (aktualni_pozice.y <= 600 && aktualni_pozice.x <= 600)) {
-      Serial.println("Jsem na RED barvě (nebo doma dle odometrie).");
+      Serial.println("[dojed_na_svoje] Podminka splnena. Jsem na RED barve (nebo doma dle odometrie).");
     } else {
-      Serial.println("Nejsem na RED barvě, hledaM RED");
+      Serial.println("[dojed_na_svoje] Podminka nesplnena. Zacinam hledat RED...");
+      int krok = 0;
       while(true) { // dokud nejsme na modré barvě
-      turn_on_spot_right(90, 10); // otočí se o 90 stupňů
-      delay(1000);
-      back_buttons(15); // otočí se o 180 stupňů
-      jed_a_chytej_puky(2800, true, false); // jede do středu
-      a = Kde_jsme(); // Zjistí, kde jsme
-      if(a.je_tam && a.barva == RED) {
-        Serial.println("reddddddddddddddddddd");
-        rkBuzzerSet(true);
+        krok++;
+        Serial.printf("[dojed_na_svoje] Krok %d: otaceni vlevo 90...\n", krok);
+        turn_on_spot_left(90, 10); // otočí se o 90 stupňů vlevo (původně vpravo)
         delay(1000);
-        rkBuzzerSet(false);
-        turn_on_spot_right(182, 10); // otočí se o 90 stupňů
-        back_buttons(15); // otočí se o 180 stupňů
-        forward(70, 20); // Přejede do středu
-        turn_on_spot_left(90, 10); // otočí se o 90 stupňů
-        back_buttons(15); // otočí se o 180 stupňů
-        forward(70, 20); // Přejede do středu
-        turn_on_spot_right(90, 10); // otočí se o 90 stupňů
-        aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
-        aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
-        Serial.printf("[POZICE] X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
-        delay(200);
-        break;
-      }
+        
+        Serial.printf("[dojed_na_svoje] Krok %d: couvani na zadni tlacitka...\n", krok);
+        back_buttons(15); // couvá na tlačítka
         delay(200);
 
+        Serial.printf("[dojed_na_svoje] Krok %d: volam Kde_jsme() po couvani...\n", krok);
+        a = Kde_jsme(); // Zjistí, kde jsme
+        Serial.printf("[dojed_na_svoje] Krok %d: Kde_jsme() navratilo je_tam=%d, barva=%d\n", krok, a.je_tam, a.barva);
+        
+        if(a.je_tam && a.barva == RED) {
+          Serial.println("[dojed_na_svoje] RED nalezena po couvani!");
+          rkBuzzerSet(true);
+          delay(1000);
+          rkBuzzerSet(false);
+          turn_on_spot_right(182, 10);
+          back_buttons(15);
+          forward(70, 20);
+          turn_on_spot_right(90, 10); // doprava o 90
+          back_buttons(15);
+          forward(70, 20);
+          aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
+          aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
+          Serial.printf("[POZICE] X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
+          delay(200);
+          break;
+        }
+        
+        Serial.printf("[dojed_na_svoje] Krok %d: jed_a_chytej_puky 2800...\n", krok);
+        jed_a_chytej_puky(2800, true, false); // jede do středu
+        
+        Serial.printf("[dojed_na_svoje] Krok %d: volam Kde_jsme() po jizde vpred...\n", krok);
+        a = Kde_jsme(); // Zjistí, kde jsme
+        Serial.printf("[dojed_na_svoje] Krok %d: Kde_jsme() navratilo je_tam=%d, barva=%d\n", krok, a.je_tam, a.barva);
+        
+        if(a.je_tam && a.barva == RED) {
+          Serial.println("[dojed_na_svoje] RED nalezena pri jizde vpred!");
+          rkBuzzerSet(true);
+          delay(1000);
+          rkBuzzerSet(false);
+          turn_on_spot_right(182, 10);
+          back_buttons(15);
+          forward(70, 20);
+          turn_on_spot_right(90, 10); // doprava o 90
+          back_buttons(15);
+          forward(70, 20);
+          aktualni_pozice.x = 350; // Nastaví aktuální pozici na střed
+          aktualni_pozice.y = 350; // Nastaví aktuální pozici na střed
+          Serial.printf("[POZICE] X=%d, Y=%d\n", aktualni_pozice.x, aktualni_pozice.y);
+          delay(200);
+          break;
+        }
+        delay(200);
       }
     }
   }
@@ -711,6 +797,8 @@ void modra(){
   
   Serial.println("[Kolo 4] Popojeti na jih: jed_a_chytej_puky(600, Y-osa, zpet)...");
   jed_a_chytej_puky(600, false, false);
+  backward(50, 15);
+  delay(200);
   close_l_box();
   
   Serial.println("[Kolo 4] Otoceni 90° doleva na vychod...");
@@ -788,6 +876,8 @@ void cervena(){
   Serial.println("[Kolo 1] Preskakuji couvani k souperove stene Y=2500.");
   turn_on_spot_left(90, 10); // pouze se otocime na jih
   delay(100);
+  backward(50, 15);
+  delay(200);
   close_r_box();
   delay(100);
   
@@ -861,6 +951,8 @@ void cervena(){
   Serial.println("[Kolo 2] Otoceni 90° doleva na jih...");
   turn_on_spot_left(90, 10);
   delay(100);
+  backward(50, 15);
+  delay(200);
   close_r_box();
   delay(100);
   
@@ -879,7 +971,8 @@ void cervena(){
   
   Serial.printf("[Kolo 2] Jizda na vychod k pravym krabicim: jed_a_chytej_puky(%d, X-osa, zpet)\n", aktualni_pozice.x - stred_od_predu - 200);
   jed_a_chytej_puky(aktualni_pozice.x - stred_od_predu - 800, true, false);
-
+  backward(50, 15);
+  delay(200);
   close_r_box();
 
   jed_a_chytej_puky((aktualni_pozice.x - stred_od_predu - 200), true, false);
@@ -940,6 +1033,8 @@ void cervena(){
   Serial.println("[Kolo 3] Otoceni 90° doleva na jih...");
   turn_on_spot_left(90, 10);
   delay(100);
+  backward(50, 15);
+  delay(200);
   close_r_box();
   delay(100);
   
@@ -1144,7 +1239,7 @@ void loop() {
     zavreni_dvirek();
     close_l_box();
     close_r_box();
-    xTaskCreate(StopTask, "StopTask", 1024, NULL, 1, NULL);
+    xTaskCreate(StopTask, "StopTask", 4096, NULL, 1, NULL);
     delay(1000);
     modra();
   }
@@ -1156,7 +1251,7 @@ void loop() {
     zavreni_dvirek();
     close_l_box();
     close_r_box();
-    xTaskCreate(StopTask, "StopTask", 1024, NULL, 1, NULL);
+    xTaskCreate(StopTask, "StopTask", 4096, NULL, 1, NULL);
     delay(1000);
     cervena();
   }
@@ -1189,22 +1284,19 @@ void loop() {
     rkBuzzerSet(false);
   }
   if(rkButtonIsPressed(BTN_UP)){
-    // Precteni barevnych hodnot
-    rkColorSensorGetRGB("puky", &r1, &g1, &b1);
-    rkColorSensorGetRGB("zem", &r2, &g2, &b2);
+    Serial.println("=== TEST DOJEZD NA SVOJE (RED) START ===");
+    rkBuzzerSet(true);
+    delay(100);
+    rkBuzzerSet(false);
     
-    log_counter++;
-    char log_entry[150];
-    snprintf(log_entry, sizeof(log_entry), 
-             "Mereni #%d -> Barevny na puky: R=%.3f G=%.3f B=%.3f | Barevny na zem: R=%.3f G=%.3f B=%.3f\n",
-             log_counter, r1, g1, b1, r2, g2, b2);
+    // Pro jistotu nastavíme odometrickou pozici mimo domov (např. 1000, 1000), 
+    // aby se otestovalo samotné chování s detekcí
+    aktualni_pozice.x = 1000;
+    aktualni_pozice.y = 1000;
     
-    color_log_history += log_entry;
+    dojed_na_svoje(false);
     
-    // Okamzity vypis pro zpetnou vazbu
-    Serial.print(log_entry);
-    
-    // Pipnuti pro indikaci ulozeni
+    Serial.println("=== TEST DOJEZD NA SVOJE (RED) KONEC ===");
     rkBuzzerSet(true);
     delay(100);
     rkBuzzerSet(false);
