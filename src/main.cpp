@@ -196,13 +196,13 @@ DetekceBarvy Kde_jsme() {
     return vysledek;
 }
 void puk_do_l_boxu(){
-  rkSmartServoSoftMove(0, 45, 180);
+  rkSmartServoMove(0, 86, 180);
 }
 void puk_do_r_boxu(){
-  rkSmartServoSoftMove(0, 205, 180);
+  rkSmartServoMove(0, 160, 180);
 }
 void zavreni_dvirek(){
-  rkSmartServoSoftMove(0, 125, 130); // nahoru
+  rkSmartServoMove(0, 125, 130); // nahoru
   delay(200);
 }
 void otevreni_prepazky(){
@@ -762,16 +762,16 @@ void setup() {
     cfg.motor_max_power_pct = 100;
 
     // Nastavení kol a rozteče
-    cfg.left_wheel_diameter = 128.0;
-    cfg.right_wheel_diameter = 128.0;
-    cfg.motor_wheel_diameter = 128;
-    cfg.roztec_kol = 267.0;
+    cfg.left_wheel_diameter = 67.86;
+    cfg.right_wheel_diameter = 68.14;
+    cfg.motor_wheel_diameter = 68.00;
+    cfg.roztec_kol = 242.48;
 
     // Korekční koeficienty
-    cfg.konstanta_radius_vnejsi_kolo = 0.96f;
-    cfg.konstanta_radius_vnitrni_kolo = 0.96f;
-    cfg.korekce_nedotacivosti_left = 0.97f;
-    cfg.korekce_nedotacivosti_right = 0.97f;
+    cfg.konstanta_radius_vnejsi_kolo = 1.0f;
+    cfg.konstanta_radius_vnitrni_kolo = 1.0f;
+    cfg.korekce_nedotacivosti_left = 1.0f;
+    cfg.korekce_nedotacivosti_right = 0.915f;
 
     // Nastavení tlačítek
     cfg.Button1 = 34;
