@@ -676,7 +676,7 @@ void modra(){
   Serial.println("[Kolo 1] Spoustim dojed_na_svoje...");
   dojed_na_svoje(true);
   
-  Serial.println("[Kolo 1] Vykladani nasich puku (levy box)...");
+  Serial.println("[Kolo 1] Vykladani nasich puku (pravy box)...");
   open_r_box();
   forward_acc(240, 25.0f);
   aktualni_pozice.y = 510;
@@ -758,7 +758,7 @@ void modra(){
   Serial.println("[Kolo 2] Spoustim dojed_na_svoje...");
   dojed_na_svoje(true);
   
-  Serial.println("[Kolo 2] Vykladani nasich puku (levy box)...");
+  Serial.println("[Kolo 2] Vykladani nasich puku (pravy box)...");
   open_r_box();
   forward_acc(240, 25.0f);
   aktualni_pozice.y = 510;
@@ -831,7 +831,7 @@ void modra(){
   Serial.println("[Kolo 3] Spoustim dojed_na_svoje...");
   dojed_na_svoje(true);
   
-  Serial.println("[Kolo 3] Vykladani nasich puku (levy box)...");
+  Serial.println("[Kolo 3] Vykladani nasich puku (pravy box)...");
   open_r_box();
   forward_acc(240, 25.0f);
   aktualni_pozice.y = 510;
@@ -897,7 +897,7 @@ void modra(){
   Serial.println("[Kolo 4] Spoustim dojed_na_svoje...");
   dojed_na_svoje(true);
   
-  Serial.println("[Kolo 4] Vykladani nasich puku (levy box)...");
+  Serial.println("[Kolo 4] Vykladani nasich puku (pravy box)...");
   open_r_box();
   forward(180, 25.0f);
   aktualni_pozice.y = 450;
